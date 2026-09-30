@@ -34,8 +34,8 @@ describe("operações proibidas no motor", () => {
     });
   }
 
-  it("lib/ não importa React, Next nem o DOM", () => {
-    for (const file of files) {
+  it("o motor (neat, game, sim) não importa React, Next nem o DOM", () => {
+    for (const file of files.filter((f) => !f.includes(`${path.sep}ui${path.sep}`))) {
       const code = fs.readFileSync(file, "utf8");
       expect(code).not.toMatch(/from\s+["'](react|next|react-dom)/);
       expect(code).not.toMatch(/\b(document|window|localStorage)\./);

@@ -21,7 +21,7 @@ colors:
   focus: "#f1d08a"
 typography:
   display:
-    fontFamily: Big Shoulders Display
+    fontFamily: Big Shoulders
     fontWeight: 800
     fontSize: clamp(2rem, 4.5vw, 3.25rem)
     letterSpacing: 0.02em
@@ -77,7 +77,7 @@ spacing:
 
 ## Typography
 
-**Big Shoulders Display** (título e números-manchete): grotesca condensada de sinalização industrial de Chicago, a mesma família visual das plaquetas de equipamento. Sempre em caixa alta, peso 800, nunca abaixo de 1,5rem. **Hanken Grotesk** (interface e texto): neutra, legível em tamanhos pequenos, com acentos do português bem desenhados. **JetBrains Mono** (valores): monoespaçada com algarismos tabulares, para números que mudam sem tremer.
+**Big Shoulders** (título e números-manchete; no Google Fonts o corte Display virou o eixo `opsz` desta família): grotesca condensada de sinalização industrial de Chicago, a mesma família visual das plaquetas de equipamento. Sempre em caixa alta, peso 800, nunca abaixo de 1,5rem. **Hanken Grotesk** (interface e texto): neutra, legível em tamanhos pequenos, com acentos do português bem desenhados. **JetBrains Mono** (valores): monoespaçada com algarismos tabulares, para números que mudam sem tremer.
 
 Nenhuma dessas faces está na lista de sobreusadas para display. O título "Fósforo" é o único momento de personalidade tipográfica; o resto obedece.
 

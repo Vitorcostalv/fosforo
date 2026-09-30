@@ -1,26 +1,241 @@
 @import "tailwindcss";
 
+/* Tokens do DESIGN.md. Escuro apenas: painel de instrumento, um único âmbar. */
+@theme {
+  --color-ground: #141416;
+  --color-surface: #1b1b1e;
+  --color-raised: #222226;
+  --color-grid: #2b2b30;
+  --color-line: #37373d;
+  --color-ink: #ece6d8;
+  --color-muted: #a8a397;
+  --color-faint: #7d7a71;
+  --color-amber: #d9a23c;
+  --color-on-amber: #1a1407;
+  --color-amber-dim: #8a6a2c;
+  --color-steel: #93a1aa;
+  --color-ok: #86ad8f;
+  --color-bad: #d8705f;
+  --color-focus: #f1d08a;
+
+  --font-display: var(--font-display-face), "Arial Narrow", sans-serif;
+  --font-sans: var(--font-body-face), system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  background: var(--color-ground);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* Grade fina de fundo, como papel milimetrado de bancada. */
+.bench-grid {
+  background-image:
+    linear-gradient(to right, rgb(236 230 216 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(236 230 216 / 0.035) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 0.95;
+}
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 36px;
+  padding: 0 0.875rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 80ms ease-out, background-color 80ms ease-out;
+}
+.btn:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--color-muted);
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  color: var(--color-faint);
+  border-color: var(--color-grid);
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-amber);
+  border-color: var(--color-amber);
+  color: var(--color-on-amber);
+}
+.btn-primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--color-focus);
+  border-color: var(--color-focus);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--color-amber-dim);
+  border-color: var(--color-amber-dim);
+}
+.btn-primary:disabled,
+.btn-primary[aria-disabled="true"] {
+  background: var(--color-grid);
+  border-color: var(--color-grid);
+  color: var(--color-faint);
+}
+
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+  }
+}
+
+/* Controle deslizante com marcas de régua. */
+input[type="range"].ruler {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].ruler::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--color-line);
+}
+input[type="range"].ruler::-moz-range-track {
+  height: 2px;
+  background: var(--color-line);
+}
+input[type="range"].ruler::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 20px;
+  margin-top: -9px;
+  border: 1px solid var(--color-ground);
+  border-radius: 1px;
+  background: var(--color-ink);
+}
+input[type="range"].ruler::-moz-range-thumb {
+  width: 10px;
+  height: 20px;
+  border: 1px solid var(--color-ground);
+  border-radius: 1px;
+  background: var(--color-ink);
+}
+input[type="range"].ruler:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Rastro de persistência: o ponto novo acende e apaga (só sem prefers-reduced-motion). */
+@keyframes flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+.flash {
+  animation: flash 1200ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+::selection {
+  background: var(--color-amber-dim);
+  color: var(--color-ink);
+}
+
+/* Conexão da rede que mudou nesta geração: acende uma vez e volta à cor normal. */
+@keyframes edge-flash-pos {
+  from {
+    stroke: var(--color-focus);
+  }
+  to {
+    stroke: var(--color-amber);
+  }
+}
+@keyframes edge-flash-neg {
+  from {
+    stroke: var(--color-ink);
+  }
+  to {
+    stroke: var(--color-steel);
+  }
+}
+.edge-changed-pos {
+  animation: edge-flash-pos 1200ms ease-out;
+}
+.edge-changed-neg {
+  animation: edge-flash-neg 1200ms ease-out;
 }

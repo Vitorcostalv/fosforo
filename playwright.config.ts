@@ -7,8 +7,10 @@ export default defineConfig({
   timeout: 120_000,
   fullyParallel: false,
   reporter: [["list"]],
-  use: { baseURL: `http://localhost:${PORT}` },
-  webServer: {
+  use: { baseURL: process.env.BASE_URL ?? `http://localhost:${PORT}` },
+  webServer: process.env.BASE_URL
+    ? undefined
+    : {
     command: `npm run build && npx next start -p ${PORT}`,
     url: `http://localhost:${PORT}/selftest`,
     reuseExistingServer: true,
