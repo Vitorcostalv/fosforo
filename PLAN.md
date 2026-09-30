@@ -118,6 +118,40 @@ O deploy de produção é obrigatório para considerar o trabalho concluído; fi
 8. **Fim de geração garantido.** Teto de ticks por geração. Se o melhor chega ao teto, a UI marca "resolvido" em vez de parecer travada.
 9. **Risco de deploy a checar cedo:** Worker via `new Worker(new URL(...), import.meta.url)` funciona com o bundler do Next; validar no **preview**, não só em dev.
 
+## 5c. Decisões após a primeira revisão (respostas do Vitor) e estado atual
+
+**Nome e distribuição.** Título/README/descrição do repo: "Fósforo: laboratório de neuroevolução (NEAT + Flappy Bird)". Topics: `neat`, `neuroevolution`, `flappy-bird`, `typescript`. `fosforo.vercel.app` **está ocupado** (HTTP 200), então o domínio será **fosforo-lab.vercel.app** (checado: 404, aparentemente livre; reconfirmo no deploy).
+
+**Licença e origem.** MIT. Nenhum código nem arquivo do neat-python foi copiado. Nenhuma imagem ou asset do minicurso é reaproveitado (o pássaro e os canos serão desenhados no canvas). O `config.txt` original está em `docs/research/` só como documentação.
+
+**A. Ativação.** Softsign `x / (1 + |x|)`, só com `+ − × ÷` e `Math.abs`. Difere da sigmoide do artigo `1/(1+e^(-4,9x))` (p. 112) porque `Math.exp` **diverge entre motores** (medido: ver `docs/research/determinism.md`). Sem `pow/sin/cos/log/exp` no motor e na física; só `Math.sqrt`/`Math.imul`/`fround`/`floor`/`abs`/`min`/`max`. Verificado por teste automático.
+
+**B. Prova de determinismo.** Teste golden (`tests/golden.json`, versionado) + Playwright em Chromium, Firefox e WebKit. **Passou nos três** com hash idêntico ao do Node. O README só afirma "mesma seed, mesma evolução" com este teste citado, e diz o que não foi testado (Safari em Apple).
+
+**C. Link do cérebro.** Cabeçalho com versão do formato e da engine. Link de outra engine mostra mensagem clara ("treinado no motor vN...") e nunca falha em silêncio. Entrada tratada como não confiável: limite de tamanho, tipos, faixas (gravidade, peso, ids), NaN/Infinity, nó inexistente, laço, par duplicado, ciclo, contagens declaradas × tamanho real. Testes de propriedade com links aleatórios e corrompidos: nunca lança.
+
+**D. Runs editadas.** Selo "editada" e uma frase na tela: "A seed sozinha não reproduz esta evolução, porque você mudou parâmetros no meio. O cérebro exportado continua funcionando em qualquer lugar."
+
+**Escolhas do projeto (não são do artigo).** Registro com justificativa:
+
+| Escolha | Valor | Por quê |
+|---|---|---|
+| Magnitude da perturbação de peso | uniforme em [-0,5; 0,5] | O artigo diz "uniformly perturbed" mas não dá a magnitude (p. 111). 0,5 é o valor do `config.txt` original do minicurso. |
+| Valor novo de peso | uniforme em [-2, 2] | O artigo não fixa. Faixa moderada para a rede não saturar de cara. |
+| Faixa dos pesos | [-8, 8] | Impede pesos que dominem a soma; o limite também protege a importação de links. |
+| Pesos iniciais | uniforme em [-1, 1] | Artigo não fixa. |
+| Bias | nó de entrada constante em 1 | O artigo não descreve bias explícito. Sem ele, a rede não teria deslocamento. |
+| Evitar ciclos | recusar a conexão se já existir caminho do destino para a origem (todas as conexões, habilitadas ou não); no cruzamento, genes que fechariam ciclo ou repetiriam um par são descartados | O artigo permite redes recorrentes. Aqui é feed-forward (corte de escopo aprovado). Testado com propriedades. |
+| Fração de sobreviventes | 20% | O artigo não fixa; é o default do neat-python (documentação). |
+| Taxas de add node / add link | 0,05 / 0,1 | Artigo usa 0,03 / 0,05 (p. 112); subi um pouco para o demo mostrar topologia crescendo mais cedo. |
+| Teto de ticks por geração | 3600 (60 s) | Garante que toda geração termina. |
+
+**Estado (etapa 2 concluída, PARADO para revisão).**
+- `lib/neat/` (rng, hash, genoma, innovation, mutação, cruzamento, distância, espécies, reprodução, população, rede, base64url), `lib/game/` (config, percurso, mundo), `lib/sim/` (run, link, match, golden, canonical).
+- 173 testes (Vitest + fast-check) verdes; cobertura: 100% linhas, 99,6% statements, 97,4% branches, 100% funções (`npm run test:cov`, com thresholds que falham o comando).
+- Playwright passou em 3 navegadores. Lint e tsc limpos.
+- Ainda **sem UI**, sem Worker, sem deploy.
+
 ## 6. Perguntas em aberto
 
 1. Nome: **Fósforo** serve?
