@@ -176,3 +176,11 @@ O deploy de produção é obrigatório para considerar o trabalho concluído; fi
 
 ### Nota sobre o /autoplan
 O `/autoplan` iniciou (preamble e snapshot de restauração funcionaram; restore em `~/.gstack/projects/fosforo/`), mas o pipeline completo (4 fases, subagentes e Codex) é pesado demais para um plano ainda sem código. Fiz a revisão CEO/Eng por conta própria, focada em risco: resultado na seção 5b. Revisão de design e DX entra no passo `/design-consultation` antes da UI. Nenhuma pontuação formal foi gerada.
+
+## 5e. Estado final (etapas 3 a 8, exceto repositório público)
+
+- Interface, Worker, editor de fases, progressão, links e partida: prontos e testados (292 testes na suíte rápida, 316 na completa; 98,3% de linhas; 17 specs de interface e 3 de determinismo no Playwright; axe sem violações WCAG 2.1 AA).
+- Revisão independente de código (agente com contexto limpo, porque o /review depende de PR e o hook trava neste Windows) achou 12 pontos; corrigi os que afetavam o usuário (run e fase dessincronizadas, gravidade errada no link exportado, mensagens de run antiga, slider rejeitado, atalhos de teclado sequestrados, histórico do editor, edição perdida ao fechar, validação de link fora do thread, `carry` e `pump` do Worker, `hashchange`). Ver o commit `4fa561a`.
+- Uma condição de corrida real foi achada pelo teste e2e (clicar em 20x antes de a run iniciar desfazia a escolha): corrigida.
+- Produção: https://fosforo-lab.vercel.app (`vercel --prod`), verificada com os testes contra a URL real.
+- Pendente: (1) repositório público no GitHub (aguarda confirmação); (2) decisão sobre o elitismo global (docs/research/seed-1333.md).
