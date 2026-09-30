@@ -1,42 +1,34 @@
-import { Rng } from "../neat/rng";
-import { ARENA, GameMode, WIND_AMPLITUDE, WIND_PERIOD } from "./config";
-
-export interface Pipe {
-  /** Posição x inicial (tick 0). A posição real é x - scroll. */
-  x: number;
-  /** Centro vertical da abertura. */
-  gapY: number;
-}
-
-export interface Course {
-  seed: number;
-  mode: GameMode;
-  pipes: Pipe[];
-  /** Alvo do vento por janela de WIND_PERIOD ticks (todos 0 no modo normal). */
-  windTargets: number[];
-}
+import { WIND_AMPLITUDE, WIND_EASING, WIND_PERIOD } from "./config";
+import type { Level } from "./level";
 
 /**
- * Gera o percurso inteiro de uma vez a partir da seed.
- * - normal: aberturas perto do centro, sem vento.
- * - caos: aberturas em toda a altura e vento variável.
+ * O que o jogo executa: uma fase mais o vento tick a tick (vazio nas fases embutidas e do editor,
+ * que são determinísticas e sem vento).
  */
-export function makeCourse(seed: number, mode: GameMode, maxTicks: number): Course {
-  const rng = new Rng(seed);
-  const pipeCount = Math.ceil((maxTicks * ARENA.pipeSpeed) / ARENA.pipeSpacing) + 3;
-  const margin = ARENA.gapHeight / 2 + 60;
-  const center = ARENA.height / 2;
-  const [lo, hi] = mode === "chaos" ? [margin, ARENA.height - margin] : [center - 130, center + 130];
-
-  const pipes: Pipe[] = [];
-  for (let k = 0; k < pipeCount; k++) {
-    pipes.push({ x: ARENA.firstPipeX + k * ARENA.pipeSpacing, gapY: Math.fround(rng.range(lo, hi)) });
-  }
-
-  const windCount = Math.ceil(maxTicks / WIND_PERIOD) + 2;
-  const windTargets: number[] = [];
-  for (let k = 0; k < windCount; k++) {
-    windTargets.push(mode === "chaos" ? Math.fround(rng.range(-WIND_AMPLITUDE, WIND_AMPLITUDE)) : 0);
-  }
-  return { seed, mode, pipes, windTargets };
+export interface Course {
+  level: Level;
+  /** wind[t] é a aceleração vertical aplicada no tick t+1. Fora do vetor, 0. */
+  wind: number[];
 }
+
+export function courseOf(level: Level): Course {
+  return { level, wind: [] };
+}
+
+export function windAt(course: Course, tick: number): number {
+  return course.wind[tick - 1] ?? 0;
+}
+
+/** Vento suave: a cada WIND_PERIOD ticks o alvo muda e o vento real anda 5% em direção a ele. */
+export function buildWindSchedule(targets: readonly number[], ticks: number): number[] {
+  const wind: number[] = [];
+  let w = 0;
+  for (let t = 0; t < ticks; t++) {
+    const target = targets[Math.min(targets.length - 1, Math.floor(t / WIND_PERIOD))] ?? 0;
+    w += (target - w) * WIND_EASING;
+    wind.push(w);
+  }
+  return wind;
+}
+
+export const WIND_MAX = WIND_AMPLITUDE;

@@ -1,0 +1,217 @@
+{
+ "budget": 300,
+ "seeds": [
+  1000,
+  1037,
+  1074,
+  1111,
+  1148,
+  1185,
+  1222,
+  1259,
+  1296,
+  1333
+ ],
+ "rows": [
+  {
+   "level": 1,
+   "name": "Largada",
+   "results": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "solved": 10,
+   "median": 1,
+   "worst": 1,
+   "seconds": 0
+  },
+  {
+   "level": 2,
+   "name": "Reta",
+   "results": [
+    2,
+    1,
+    1,
+    2,
+    2,
+    1,
+    1,
+    2,
+    3,
+    2
+   ],
+   "solved": 10,
+   "median": 2,
+   "worst": 3,
+   "seconds": 0
+  },
+  {
+   "level": 3,
+   "name": "Ondulação",
+   "results": [
+    4,
+    2,
+    1,
+    4,
+    5,
+    2,
+    3,
+    3,
+    3,
+    3
+   ],
+   "solved": 10,
+   "median": 3,
+   "worst": 5,
+   "seconds": 0
+  },
+  {
+   "level": 4,
+   "name": "Degrau",
+   "results": [
+    5,
+    6,
+    4,
+    3,
+    7,
+    6,
+    8,
+    5,
+    3,
+    5
+   ],
+   "solved": 10,
+   "median": 5,
+   "worst": 8,
+   "seconds": 0
+  },
+  {
+   "level": 5,
+   "name": "Vale",
+   "results": [
+    12,
+    3,
+    9,
+    8,
+    4,
+    13,
+    5,
+    3,
+    2,
+    7
+   ],
+   "solved": 10,
+   "median": 6,
+   "worst": 13,
+   "seconds": 0
+  },
+  {
+   "level": 6,
+   "name": "Serra",
+   "results": [
+    20,
+    15,
+    8,
+    10,
+    21,
+    11,
+    16,
+    12,
+    8,
+    13
+   ],
+   "solved": 10,
+   "median": 12.5,
+   "worst": 21,
+   "seconds": 0
+  },
+  {
+   "level": 7,
+   "name": "Zigue",
+   "results": [
+    21,
+    16,
+    14,
+    25,
+    14,
+    18,
+    30,
+    13,
+    13,
+    16
+   ],
+   "solved": 10,
+   "median": 16,
+   "worst": 30,
+   "seconds": 0
+  },
+  {
+   "level": 8,
+   "name": "Funil",
+   "results": [
+    16,
+    21,
+    24,
+    30,
+    14,
+    46,
+    26,
+    9,
+    51,
+    24
+   ],
+   "solved": 10,
+   "median": 24,
+   "worst": 51,
+   "seconds": 1
+  },
+  {
+   "level": 9,
+   "name": "Garganta",
+   "results": [
+    45,
+    130,
+    12,
+    15,
+    46,
+    24,
+    67,
+    32,
+    76,
+    31
+   ],
+   "solved": 10,
+   "median": 38.5,
+   "worst": 130,
+   "seconds": 1
+  },
+  {
+   "level": 10,
+   "name": "Agulha",
+   "results": [
+    64,
+    123,
+    75,
+    143,
+    111,
+    111,
+    63,
+    88,
+    65,
+    null
+   ],
+   "solved": 9,
+   "median": 88,
+   "worst": 143,
+   "seconds": 4
+  }
+ ]
+}

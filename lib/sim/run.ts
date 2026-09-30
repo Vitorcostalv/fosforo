@@ -1,6 +1,10 @@
+import { makeChaosCourse } from "../game/chaos";
 import { DEFAULT_GRAVITY, GameMode, normalizeGravity } from "../game/config";
-import { Course, makeCourse } from "../game/course";
-import { SENSOR_COUNT, World, birdFitness, createWorld, sense, stepWorld, aliveCount } from "../game/world";
+import { Course, courseOf } from "../game/course";
+import { describeFailure } from "../game/feasibility";
+import { Level, levelTicks, validateLevelData } from "../game/level";
+import { BUILTIN_LEVELS } from "../game/levels";
+import { SENSOR_COUNT, World, aliveCount, birdFitness, createWorld, sense, stepWorld } from "../game/world";
 import { DEFAULT_NEAT_CONFIG, NeatConfig } from "../neat/config";
 import { Genome } from "../neat/genome";
 import { hashString } from "../neat/hash";
@@ -8,6 +12,7 @@ import { Network, compile, forward } from "../neat/network";
 import { PopulationState, createPopulation, evolve } from "../neat/population";
 import { deriveSeed, normalizeSeed } from "../neat/rng";
 import { canonicalGenomeString } from "./canonical";
+import { feasibilityOfLevel } from "./feasibilityCache";
 
 export interface RunParams {
   seed: number;
@@ -16,9 +21,9 @@ export interface RunParams {
   addNodeRate: number;
   addConnectionRate: number;
   gravity: number;
+  /** level: joga a fase de `level`; chaos: percurso novo a cada geração, com vento. */
   mode: GameMode;
-  /** Teto de ticks por geração (60 ticks = 1 segundo). */
-  maxTicks: number;
+  level: Level;
 }
 
 export const DEFAULT_RUN_PARAMS: RunParams = {
@@ -28,8 +33,8 @@ export const DEFAULT_RUN_PARAMS: RunParams = {
   addNodeRate: DEFAULT_NEAT_CONFIG.addNodeRate,
   addConnectionRate: DEFAULT_NEAT_CONFIG.addConnectionRate,
   gravity: DEFAULT_GRAVITY,
-  mode: "normal",
-  maxTicks: 3600,
+  mode: "level",
+  level: BUILTIN_LEVELS[0],
 };
 
 export interface GenerationStats {
@@ -38,7 +43,9 @@ export interface GenerationStats {
   meanFitness: number;
   speciesCount: number;
   bestPipes: number;
-  /** O melhor sobreviveu até o teto de ticks. */
+  /** Quantos pássaros completaram a fase. */
+  finishers: number;
+  /** Pelo menos um pássaro completou a fase. */
   solved: boolean;
 }
 
@@ -55,7 +62,7 @@ export interface Run {
 }
 
 /** Limita e normaliza parâmetros vindos da UI ou de links. Nunca lança. */
-export function sanitizeParams(p: Partial<RunParams> & { seed?: number }, base: RunParams = DEFAULT_RUN_PARAMS): RunParams {
+export function sanitizeParams(p: Partial<RunParams>, base: RunParams = DEFAULT_RUN_PARAMS): RunParams {
   const clampNum = (v: unknown, lo: number, hi: number, fallback: number): number =>
     typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
   return {
@@ -65,8 +72,8 @@ export function sanitizeParams(p: Partial<RunParams> & { seed?: number }, base: 
     addNodeRate: clampNum(p.addNodeRate, 0, 1, base.addNodeRate),
     addConnectionRate: clampNum(p.addConnectionRate, 0, 1, base.addConnectionRate),
     gravity: normalizeGravity(p.gravity ?? base.gravity),
-    mode: p.mode === "chaos" || p.mode === "normal" ? p.mode : base.mode,
-    maxTicks: Math.floor(clampNum(p.maxTicks, 60, 36000, base.maxTicks)),
+    mode: p.mode === "chaos" || p.mode === "level" ? p.mode : base.mode,
+    level: p.level !== undefined && validateLevelData(p.level).length === 0 ? p.level : base.level,
   };
 }
 
@@ -79,6 +86,15 @@ export function toNeatConfig(p: RunParams): NeatConfig {
     addNodeRate: p.addNodeRate,
     addConnectionRate: p.addConnectionRate,
   };
+}
+
+/** Uma run só treina em fase viável. O caos é gerado já validado, então sempre passa. */
+export function checkRunParams(p: RunParams): { ok: true } | { ok: false; message: string } {
+  if (p.mode === "chaos") return { ok: true };
+  const problems = validateLevelData(p.level);
+  if (problems.length > 0) return { ok: false, message: `Fase inválida: ${problems[0]}.` };
+  const result = feasibilityOfLevel(p.level, p.gravity);
+  return result.ok ? { ok: true } : { ok: false, message: `Não dá para treinar: a fase é ${describeFailure(result)} com esta gravidade.` };
 }
 
 export function createRun(input: Partial<RunParams> = {}): Run {
@@ -101,11 +117,11 @@ export function applyParams(run: Run, change: Partial<RunParams>): void {
   run.edited = true;
 }
 
-/** Percurso da geração. Normal: sempre o mesmo. Caos: um novo por geração. */
+/** Percurso da geração. Fase: sempre a mesma. Caos: um novo por geração, já validado. */
 export function courseFor(params: RunParams, generation: number): Course {
-  const seed =
-    params.mode === "chaos" ? deriveSeed(params.seed, 1000 + generation) : deriveSeed(params.seed, 0xc0ffee);
-  return makeCourse(seed, params.mode, params.maxTicks);
+  return params.mode === "chaos"
+    ? makeChaosCourse(deriveSeed(params.seed, 1000 + generation), params.gravity)
+    : courseOf(params.level);
 }
 
 /** Uma geração em andamento, tick a tick (a UI/Worker consome em fatias; os testes rodam até o fim). */
@@ -115,18 +131,18 @@ export class GenerationSim {
   private readonly buffers: Float64Array[];
   private readonly inputs: number[] = new Array<number>(SENSOR_COUNT).fill(0);
   private readonly jumps: boolean[];
-  private readonly maxTicks: number;
+  private readonly tickGuard: number;
 
   constructor(course: Course, params: RunParams, genomes: readonly Genome[], layout: PopulationState["layout"]) {
     this.world = createWorld(course, params.gravity, genomes.length);
     this.nets = genomes.map((g) => compile(g, layout));
     this.buffers = this.nets.map((n) => new Float64Array(n.numNodes));
     this.jumps = new Array<boolean>(genomes.length).fill(false);
-    this.maxTicks = params.maxTicks;
+    this.tickGuard = levelTicks(course.level) + 5;
   }
 
   get done(): boolean {
-    return this.world.tick >= this.maxTicks || aliveCount(this.world) === 0;
+    return this.world.over || aliveCount(this.world) === 0 || this.world.tick >= this.tickGuard;
   }
 
   step(): void {
@@ -163,14 +179,15 @@ export function finishGeneration(run: Run, sim: GenerationSim): GenerationStats 
     total += f;
     if (f > fitness[bestIndex]) bestIndex = i;
   });
-  const bestBird = sim.world.birds[bestIndex];
+  const finishers = sim.world.birds.filter((b) => b.finished).length;
   const stats: GenerationStats = {
     generation: run.population.generation,
     maxFitness: fitness[bestIndex],
     meanFitness: total / fitness.length,
     speciesCount: run.population.species.length,
-    bestPipes: bestBird.pipes,
-    solved: bestBird.alive && sim.world.tick >= run.params.maxTicks,
+    bestPipes: sim.world.birds[bestIndex].pipes,
+    finishers,
+    solved: finishers > 0,
   };
   run.history.push(stats);
   run.best = run.population.genomes[bestIndex];
@@ -189,7 +206,7 @@ export function runGeneration(run: Run): GenerationStats {
 /** Resumo textual estável da run, para golden tests e comparação entre navegadores. */
 export function runDigest(run: Run): string {
   const stats = run.history.map(
-    (h) => `${h.generation}:${h.maxFitness}:${h.meanFitness}:${h.speciesCount}:${h.bestPipes}:${h.solved ? 1 : 0}`,
+    (h) => `${h.generation}:${h.maxFitness}:${h.meanFitness}:${h.speciesCount}:${h.bestPipes}:${h.finishers}`,
   );
   const genome = run.best ? canonicalGenomeString(run.best) : "none";
   return hashString(`${stats.join("|")}#${genome}`);

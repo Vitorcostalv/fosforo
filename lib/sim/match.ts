@@ -1,8 +1,8 @@
-import { makeCourse } from "../game/course";
+import { Course } from "../game/course";
+import { levelTicks } from "../game/level";
 import { SENSOR_COUNT, World, birdFitness, createWorld, sense, stepWorld } from "../game/world";
 import { Genome, makeLayout } from "../neat/genome";
 import { Network, compile, forward } from "../neat/network";
-import { BrainEnv } from "./link";
 
 export interface MatchScore {
   human: number;
@@ -10,25 +10,25 @@ export interface MatchScore {
 }
 
 /**
- * Humano (pássaro 0) e cérebro (pássaro 1) no mesmo percurso, com a mesma física.
- * A partida acaba quando os dois morrem ou quando o teto de ticks é atingido.
+ * Humano (pássaro 0) e cérebro (pássaro 1) na MESMA fase, com a mesma física.
+ * A partida acaba quando os dois morrem ou completam a fase.
  */
 export class Match {
   readonly world: World;
   private readonly net: Network;
   private readonly values: Float64Array;
   private readonly inputs = new Array<number>(SENSOR_COUNT).fill(0);
-  private readonly maxTicks: number;
+  private readonly tickGuard: number;
 
-  constructor(genome: Genome, env: BrainEnv, maxTicks = 36000) {
-    this.maxTicks = maxTicks;
-    this.world = createWorld(makeCourse(env.courseSeed, env.mode, maxTicks), env.gravity, 2);
+  constructor(genome: Genome, course: Course, gravity: number) {
+    this.world = createWorld(course, gravity, 2);
     this.net = compile(genome, makeLayout(SENSOR_COUNT, 1));
     this.values = new Float64Array(this.net.numNodes);
+    this.tickGuard = levelTicks(course.level) + 5;
   }
 
   get done(): boolean {
-    return this.world.tick >= this.maxTicks || (!this.world.birds[0].alive && !this.world.birds[1].alive);
+    return this.world.over || (!this.world.birds[0].alive && !this.world.birds[1].alive) || this.world.tick >= this.tickGuard;
   }
 
   step(humanJump: boolean): void {
@@ -47,5 +47,9 @@ export class Match {
 
   fitness(): MatchScore {
     return { human: birdFitness(this.world.birds[0]), ai: birdFitness(this.world.birds[1]) };
+  }
+
+  finished(): { human: boolean; ai: boolean } {
+    return { human: this.world.birds[0].finished, ai: this.world.birds[1].finished };
   }
 }

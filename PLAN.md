@@ -152,6 +152,21 @@ O deploy de produção é obrigatório para considerar o trabalho concluído; fi
 - Playwright passou em 3 navegadores. Lint e tsc limpos.
 - Ainda **sem UI**, sem Worker, sem deploy.
 
+## 5d. Novo escopo (segunda rodada de respostas do Vitor) e estado
+
+**Adicionado ao MVP:** 10 fases embutidas (dados versionados), validador de viabilidade, editor de fases (com desfazer/refazer, teclado e toque, localStorage em try/catch, JSON e link), progressão (fases 2 a 10 bloqueadas + "desbloquear tudo"), link do cérebro com a fase (embutida = id + versão; customizada = dados compactados), caos como modo extra fora das 10 fases, e golden por fase nos 3 navegadores.
+
+**Ordem:** (1) fases + validador + testes no motor, **PARADO para revisão** ← estamos aqui; (2) `/design-consultation`; (3) Worker e UI, incluindo o editor. Se o editor estourar o prazo, aviso e proponho o corte em vez de entregar pela metade.
+
+**Publicação obrigatória ao fim:** preview na Vercel (com confirmação) quando a UI básica e o editor rodarem; depois `/design-review` e `/review` (manual se travarem), confirmação, repo público, `vercel --prod`; só termina com a URL de produção funcionando, com um link de cérebro em fase embutida e outro em fase customizada testados nela. `fosforo-lab` reconfirmado no deploy.
+
+**Etapa 1 concluída (o que foi feito):**
+- `lib/game/`: `level.ts` (dado + validação estrutural), `physics.ts` (física/colisão compartilhadas), `feasibility.ts` (validador), `chaos.ts` (caos validado por construção), `levels/` (10 fases), `world.ts` com linha de chegada e bônus.
+- `lib/sim/`: `levelCodec.ts` (fase em JSON/link, entrada não confiável), `link.ts` (formato 2, motor 2, com fase), `env.ts`, `feasibilityCache.ts`, `run.ts` (modo fase/caos, `checkRunParams`), `match.ts` (humano e IA na mesma fase).
+- Testes: 267 (Vitest + fast-check), inclusive fuzz de links e fases, propriedades do validador e "o NEAT completa as 10 fases".
+- Playwright: 12 hashes (10 fases, caos, validador) idênticos em Chromium, Firefox e WebKit.
+- Medições e decisões em `docs/research/feasibility.md` e `docs/difficulty.md`.
+
 ## 6. Perguntas em aberto
 
 1. Nome: **Fósforo** serve?

@@ -229,5 +229,5 @@ describe("aceitação: XOR (o teste do artigo, Seção 4)", () => {
     const solved = results.filter((r) => r.solved);
     expect(solved.length).toBeGreaterThanOrEqual(5);
     expect(solved.every((r) => r.hidden >= 1)).toBe(true);
-  }, 120000);
+  });
 });

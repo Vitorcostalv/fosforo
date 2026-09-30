@@ -1,16 +1,18 @@
 import {
   ARENA,
+  FITNESS_FINISH_BONUS,
   FITNESS_PER_PIPE,
   FITNESS_PER_TICK,
-  WIND_EASING,
-  WIND_PERIOD,
 } from "./config";
-import { Course } from "./course";
+import { Course, windAt } from "./course";
+import { hitsObstacle, nextVelocity, outOfBounds } from "./physics";
 
 export interface Bird {
   y: number;
   vy: number;
   alive: boolean;
+  /** Chegou à linha de chegada com vida. */
+  finished: boolean;
   /** Ticks vivo. */
   ticks: number;
   /** Canos totalmente ultrapassados enquanto vivo. */
@@ -21,18 +23,20 @@ export interface World {
   course: Course;
   gravity: number;
   tick: number;
-  /** Quanto o cenário andou para a esquerda. */
+  /** Quanto o cenário andou: velocidade × tick (multiplicação, não acúmulo, para ser exato). */
   scroll: number;
   wind: number;
-  /** Índice do primeiro cano que ainda não foi totalmente ultrapassado. */
+  /** Índice do primeiro obstáculo ainda não totalmente ultrapassado. */
   nextPipe: number;
+  /** A linha de chegada foi cruzada (vale para todos os pássaros ao mesmo tempo). */
+  over: boolean;
   birds: Bird[];
 }
 
 export const SENSOR_COUNT = 4;
 
 export function createBird(): Bird {
-  return { y: ARENA.height / 2, vy: 0, alive: true, ticks: 0, pipes: 0 };
+  return { y: ARENA.height / 2, vy: 0, alive: true, finished: false, ticks: 0, pipes: 0 };
 }
 
 export function createWorld(course: Course, gravity: number, birdCount: number): World {
@@ -43,6 +47,7 @@ export function createWorld(course: Course, gravity: number, birdCount: number):
     scroll: 0,
     wind: 0,
     nextPipe: 0,
+    over: false,
     birds: Array.from({ length: birdCount }, createBird),
   };
 }
@@ -53,56 +58,35 @@ export function aliveCount(w: World): number {
   return n;
 }
 
-/** Física de um pássaro por tick: o pulo troca a velocidade, gravidade e vento aceleram. */
-export function stepBirdPhysics(b: Bird, jump: boolean, gravity: number, wind: number): void {
-  let vy = (jump ? ARENA.jumpVelocity : b.vy) + gravity + wind;
-  if (vy > ARENA.maxSpeed) vy = ARENA.maxSpeed;
-  else if (vy < -ARENA.maxSpeed) vy = -ARENA.maxSpeed;
-  b.vy = vy;
-  b.y += vy;
-}
-
-/** Colisão com teto, chão ou o cano `pipeIndex` (caixa do pássaro contra as duas caixas do cano). */
+/** Colisão com teto, chão ou o obstáculo `nextPipe`. */
 export function collides(b: Bird, w: World): boolean {
-  const h = ARENA.birdHalf;
-  if (b.y - h <= 0 || b.y + h >= ARENA.height) return true;
-  const pipe = w.course.pipes[w.nextPipe];
-  if (!pipe) return false;
-  const left = pipe.x - w.scroll;
-  const right = left + ARENA.pipeWidth;
-  if (ARENA.birdX + h <= left || ARENA.birdX - h >= right) return false;
-  const gapTop = pipe.gapY - ARENA.gapHeight / 2;
-  const gapBottom = pipe.gapY + ARENA.gapHeight / 2;
-  return b.y - h < gapTop || b.y + h > gapBottom;
-}
-
-function updateWind(w: World): void {
-  const targets = w.course.windTargets;
-  const target = targets[Math.min(targets.length - 1, Math.floor(w.tick / WIND_PERIOD))] ?? 0;
-  w.wind += (target - w.wind) * WIND_EASING;
+  if (outOfBounds(b.y, ARENA.birdHalf)) return true;
+  const obstacle = w.course.level.obstacles[w.nextPipe];
+  if (!obstacle) return false;
+  return hitsObstacle(b.y, ARENA.birdHalf, ARENA.birdX + w.scroll, obstacle);
 }
 
 function updateNextPipe(w: World): void {
-  const pipes = w.course.pipes;
-  while (
-    w.nextPipe < pipes.length - 1 &&
-    pipes[w.nextPipe].x - w.scroll + ARENA.pipeWidth < ARENA.birdX - ARENA.birdHalf
-  ) {
+  const obstacles = w.course.level.obstacles;
+  const birdLevelX = ARENA.birdX + w.scroll;
+  while (w.nextPipe < obstacles.length && obstacles[w.nextPipe].x + ARENA.pipeWidth < birdLevelX - ARENA.birdHalf) {
     w.nextPipe++;
   }
 }
 
-/** Avança um tick. `jumps[i]` diz se o pássaro i pula; pássaros mortos são ignorados. */
+/** Avança um tick. `jumps[i]` diz se o pássaro i pula; pássaros mortos ou que já chegaram são ignorados. */
 export function stepWorld(w: World, jumps: readonly boolean[]): void {
-  updateWind(w);
+  if (w.over) return;
   w.tick++;
-  w.scroll += ARENA.pipeSpeed;
+  w.wind = windAt(w.course, w.tick);
+  w.scroll = w.course.level.speed * w.tick;
   updateNextPipe(w);
   const cleared = w.nextPipe;
   for (let i = 0; i < w.birds.length; i++) {
     const b = w.birds[i];
     if (!b.alive) continue;
-    stepBirdPhysics(b, jumps[i] === true, w.gravity, w.wind);
+    b.vy = nextVelocity(b.vy, jumps[i] === true, w.gravity, w.wind);
+    b.y += b.vy;
     if (collides(b, w)) {
       b.alive = false;
     } else {
@@ -110,20 +94,30 @@ export function stepWorld(w: World, jumps: readonly boolean[]): void {
       b.pipes = cleared;
     }
   }
+  if (ARENA.birdX + w.scroll >= w.course.level.finishX) {
+    w.over = true;
+    for (const b of w.birds) {
+      if (b.alive) {
+        b.alive = false;
+        b.finished = true;
+      }
+    }
+  }
 }
 
+/** Fitness: sobreviver, passar canos e, acima de tudo, completar a fase. */
 export function birdFitness(b: Bird): number {
-  return b.ticks * FITNESS_PER_TICK + b.pipes * FITNESS_PER_PIPE;
+  return b.ticks * FITNESS_PER_TICK + b.pipes * FITNESS_PER_PIPE + (b.finished ? FITNESS_FINISH_BONUS : 0);
 }
 
 /**
  * Entradas da rede, todas finitas e em escala próxima de [-1, 1]:
- * altura, velocidade vertical, distância horizontal ao próximo cano e desnível até o centro da abertura.
+ * altura, velocidade vertical, distância horizontal ao próximo cano e desnível até o centro do vão.
  */
 export function sense(w: World, b: Bird, out: number[]): number[] {
-  const pipe = w.course.pipes[w.nextPipe];
-  const dx = pipe ? (pipe.x - w.scroll - ARENA.birdX) / 300 : 1;
-  const dy = pipe ? (pipe.gapY - b.y) / (ARENA.height / 2) : 0;
+  const obstacle = w.course.level.obstacles[w.nextPipe];
+  const dx = obstacle ? (obstacle.x - w.scroll - ARENA.birdX) / 300 : 1;
+  const dy = obstacle ? (obstacle.gapY - b.y) / (ARENA.height / 2) : 0;
   out[0] = (b.y / ARENA.height) * 2 - 1;
   out[1] = b.vy / 10;
   out[2] = dx;
