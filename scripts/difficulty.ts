@@ -78,6 +78,8 @@ const lines = [
   `Seeds: ${SEEDS.join(", ")}`,
 ];
 const dir = path.join(import.meta.dirname, "..", "docs");
+const notesFile = path.join(dir, "difficulty-notes.md");
+if (fs.existsSync(notesFile)) lines.push("", fs.readFileSync(notesFile, "utf8").trim());
 if (from === 1 && to === 10) {
   fs.writeFileSync(path.join(dir, "difficulty.json"), JSON.stringify({ budget, seeds: SEEDS, rows }, null, 1) + "\n");
   fs.writeFileSync(path.join(dir, "difficulty.md"), lines.join("\n") + "\n");

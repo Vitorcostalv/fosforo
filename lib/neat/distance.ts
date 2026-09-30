@@ -7,7 +7,11 @@ import { Genome } from "./genome";
  * E = genes excess, D = disjoint, W̄ = diferença média de pesos dos genes que casam (incluindo
  * desabilitados), N = genes do maior genoma (N = 1 se ambos têm menos de 20).
  */
-export function compatibilityDistance(a: Genome, b: Genome, cfg: Pick<NeatConfig, "c1" | "c2" | "c3">): number {
+export function compatibilityDistance(
+  a: Genome,
+  b: Genome,
+  cfg: Pick<NeatConfig, "c1" | "c2" | "c3"> & Partial<Pick<NeatConfig, "smallGenomeGenes">>,
+): number {
   const ga = a.conns;
   const gb = b.conns;
   const maxA = ga.length > 0 ? ga[ga.length - 1].innovation : -1;
@@ -38,7 +42,7 @@ export function compatibilityDistance(a: Genome, b: Genome, cfg: Pick<NeatConfig
   }
 
   const larger = Math.max(ga.length, gb.length);
-  const n = larger < 20 ? 1 : larger;
+  const n = larger < (cfg.smallGenomeGenes ?? 20) ? 1 : Math.max(1, larger);
   const avgWeight = matching > 0 ? weightDiff / matching : 0;
   return (cfg.c1 * excess) / n + (cfg.c2 * disjoint) / n + cfg.c3 * avgWeight;
 }

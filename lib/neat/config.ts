@@ -41,6 +41,18 @@ export interface NeatConfig {
   populationStagnation: number;
   /** Espécies com mais indivíduos que isto copiam o campeão intacto (artigo: 5). */
   championMinSpeciesSize: number;
+
+  /**
+   * EXPERIMENTAL (desligado por padrão = comportamento do artigo). Quantos melhores indivíduos da
+   * POPULAÇÃO passam intactos para a próxima geração, mesmo em espécie pequena. O artigo só copia
+   * o campeão de espécie com mais de 5 membros.
+   */
+  globalElitism: number;
+  /**
+   * Eq. 1: abaixo deste número de genes o normalizador N vale 1 (artigo: 20). Infinity = N sempre 1;
+   * 0 = N sempre o tamanho do maior genoma. Mudar isto muda a especiação.
+   */
+  smallGenomeGenes: number;
 }
 
 export const DEFAULT_NEAT_CONFIG: NeatConfig = {
@@ -67,4 +79,6 @@ export const DEFAULT_NEAT_CONFIG: NeatConfig = {
   maxStagnation: 15,
   populationStagnation: 20,
   championMinSpeciesSize: 5,
+  globalElitism: 0,
+  smallGenomeGenes: 20,
 };

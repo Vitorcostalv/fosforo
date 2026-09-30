@@ -84,7 +84,26 @@ export function reproduce(input: ReproduceInput): Genome[] {
       quota--;
     }
   });
-  return children;
+  return applyGlobalElitism(children, genomes, fitness, cfg.globalElitism);
+}
+
+/** Experimental: garante os K melhores da população, intactos, no lugar dos últimos filhos gerados. */
+function applyGlobalElitism(
+  children: Genome[],
+  genomes: readonly Genome[],
+  fitness: readonly number[],
+  count: number,
+): Genome[] {
+  const k = Math.min(Math.floor(count), children.length, genomes.length);
+  if (!(k > 0)) return children;
+  const top = genomes
+    .map((_, i) => i)
+    .sort((a, b) => fitness[b] - fitness[a] || a - b)
+    .slice(0, k)
+    .map((i) => genomes[i]);
+  const missing = top.filter((g) => !children.includes(g));
+  if (missing.length === 0) return children;
+  return [...missing, ...children.slice(0, children.length - missing.length)];
 }
 
 function pickMate(
