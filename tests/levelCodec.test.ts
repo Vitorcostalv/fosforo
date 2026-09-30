@@ -14,13 +14,13 @@ import {
   encodeLevelLink,
   vetLevel,
 } from "../lib/sim/levelCodec";
-import { arbSeed } from "./helpers";
+import { LEVEL_SAMPLE, arbSeed, runs } from "./helpers";
 import { feasibleByConstruction, impossibleByConstruction } from "./levelgen";
 
 const same = (a: Level, b: Level) => JSON.stringify([a.speed, a.finishX, a.obstacles]) === JSON.stringify([b.speed, b.finishX, b.obstacles]);
 
 describe("fase: exportar e importar", () => {
-  it.each(BUILTIN_LEVELS.map((l, i) => [i + 1, l] as const))("a fase embutida %i sobrevive a JSON e a link", (_n, level) => {
+  it.each(LEVEL_SAMPLE.map((i) => [i + 1, BUILTIN_LEVELS[i]] as const))("a fase embutida %i sobrevive a JSON e a link", (_n, level) => {
     const j = decodeLevelJson(encodeLevelJson(level));
     const l = decodeLevelLink(encodeLevelLink(level));
     expect(j.ok && same(j.level, level)).toBe(true);
@@ -37,7 +37,7 @@ describe("fase: exportar e importar", () => {
         const l = decodeLevelLink(encodeLevelLink(level as Level));
         return j.ok && l.ok && same(j.level, level as Level) && same(l.level, level as Level);
       }),
-      { numRuns: 40 },
+      { numRuns: runs(8, 40) },
     );
   });
 
@@ -154,7 +154,7 @@ describe("fase: entrada não confiável", () => {
           return typeof a.ok === "boolean" && typeof b.ok === "boolean";
         },
       ),
-      { numRuns: 500 },
+      { numRuns: runs(25, 500) },
     );
   });
 });

@@ -6,11 +6,11 @@ import { courseOf } from "../lib/game/course";
 import { FeasibilityScanner, checkFeasibility, describeFailure } from "../lib/game/feasibility";
 import { LEVEL_LIMITS, Level, Obstacle, validateLevelData } from "../lib/game/level";
 import { BUILTIN_LEVELS } from "../lib/game/levels";
-import { arbSeed } from "./helpers";
+import { FULL, LEVEL_SAMPLE, arbSeed, runs } from "./helpers";
 import { feasibleByConstruction, impossibleByConstruction, replay } from "./levelgen";
 
 describe("validador de viabilidade: fases embutidas", () => {
-  it.each(BUILTIN_LEVELS.map((l, i) => [i + 1, l] as const))("a fase %i é viável, exata, e o gabarito completa a fase no jogo real", (_n, level) => {
+  it.each(LEVEL_SAMPLE.map((i) => [i + 1, BUILTIN_LEVELS[i]] as const))("a fase %i é viável, exata, e o gabarito completa a fase no jogo real", (_n, level) => {
     const result = checkFeasibility(courseOf(level), DEFAULT_GRAVITY, { witness: true });
     expect(result.ok).toBe(true);
     expect(result.exact).toBe(true);
@@ -43,7 +43,7 @@ describe("validador de viabilidade: propriedades", () => {
         const w = replay(courseOf(level as Level), gravity, result.witness as boolean[]);
         return w.birds[0].finished;
       }),
-      { numRuns: 60, skipEqualValues: false },
+      { numRuns: runs(15, 60), skipEqualValues: false },
     );
     expect(tested).toBeGreaterThan(10);
   });
@@ -58,7 +58,7 @@ describe("validador de viabilidade: propriedades", () => {
         const result = checkFeasibility(courseOf(level as Level), Math.fround(gravity));
         return !result.ok && result.blockedObstacle !== null && result.blockedObstacle <= 1;
       }),
-      { numRuns: 120 },
+      { numRuns: runs(40, 120) },
     );
     expect(tested).toBeGreaterThan(20);
   });
@@ -161,13 +161,13 @@ describe("caos: nunca gera percurso impossível", () => {
         const w = replay(course, gravity, result.witness as boolean[]);
         return w.birds[0].finished && w.birds[0].pipes === course.level.obstacles.length;
       }),
-      { numRuns: 25 },
+      { numRuns: runs(4, 25) },
     );
   });
 
   it("nunca é impossível em toda a faixa de gravidade permitida, inclusive as extremas", () => {
-    for (const gravity of [GRAVITY_MIN, 0.25, 0.3, 0.4, 0.55, 0.9, 1.5, GRAVITY_MAX].map(Math.fround)) {
-      for (let seed = 1; seed <= 5; seed++) {
+    for (const gravity of (FULL ? [GRAVITY_MIN, 0.25, 0.3, 0.4, 0.55, 0.9, 1.5, GRAVITY_MAX] : [GRAVITY_MIN, 0.3, 0.55, GRAVITY_MAX]).map(Math.fround)) {
+      for (let seed = 1; seed <= (FULL ? 5 : 2); seed++) {
         const course = makeChaosCourse(seed, gravity);
         expect(validateLevelData(course.level), `g=${gravity} seed=${seed}`).toEqual([]);
         expect(validateCourse(course, gravity).ok, `g=${gravity} seed=${seed}`).toBe(true);

@@ -34,3 +34,12 @@ export const arbGenome = fc
 export const arbParents = fc
   .tuple(arbSeed, fc.integer({ min: 0, max: 10 }), arbSeed, fc.integer({ min: 0, max: 10 }))
   .map(([s1, n1, s2, n2]) => [grownGenome(s1, n1), grownGenome(s2, n2)] as const);
+
+/**
+ * Suíte rápida (padrão) x completa (`FULL=1`). A rápida roda em todo commit: menos execuções por
+ * propriedade e só as fases 1 e 10. A completa roda todas as fases, todas as gravidades e o fuzz longo.
+ */
+export const FULL = process.env.FULL === "1";
+export const runs = (fast: number, full: number): number => (FULL ? full : fast);
+/** Índices (0-based) das fases embutidas que os testes percorrem. */
+export const LEVEL_SAMPLE: readonly number[] = FULL ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : [0, 9];

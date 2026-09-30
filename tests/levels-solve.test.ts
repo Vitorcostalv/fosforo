@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILTIN_LEVELS } from "../lib/game/levels";
 import { createRun, runGeneration } from "../lib/sim/run";
+import { LEVEL_SAMPLE } from "./helpers";
 
 /**
  * O NEAT completa cada uma das 10 fases embutidas.
@@ -20,7 +21,7 @@ function generationsToSolve(levelIndex: number, seed: number): number | null {
 }
 
 describe(`o NEAT completa as fases embutidas (orçamento: ${BUDGET_GENERATIONS} gerações, população 100)`, () => {
-  it.each(BUILTIN_LEVELS.map((l, i) => [i + 1, l.name, i] as const))("fase %i (%s)", (_n, _name, index) => {
+  it.each(LEVEL_SAMPLE.map((i) => [i + 1, BUILTIN_LEVELS[i].name, i] as const))("fase %i (%s)", (_n, _name, index) => {
     const results = SEEDS.map((seed) => ({ seed, gens: generationsToSolve(index, seed) }));
     const skip = KNOWN_UNSOLVED[String(index + 1)] ?? [];
     for (const r of results) {

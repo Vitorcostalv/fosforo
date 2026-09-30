@@ -23,7 +23,7 @@ import {
   encodeBrainJson,
   encodeBrainLink,
 } from "../lib/sim/link";
-import { LAYOUT, arbGenome, arbSeed } from "./helpers";
+import { LAYOUT, LEVEL_SAMPLE, arbGenome, arbSeed, runs } from "./helpers";
 import { feasibleByConstruction, impossibleByConstruction } from "./levelgen";
 
 // Fases customizadas viáveis, calculadas uma vez.
@@ -34,7 +34,7 @@ for (let seed = 1; CUSTOM_LEVELS.length < 3 && seed < 500; seed++) {
 }
 
 const arbWorld: fc.Arbitrary<{ world: WorldRef; gravity: number }> = fc.oneof(
-  fc.integer({ min: 1, max: 10 }).map((index) => ({ world: { kind: "builtin" as const, index, version: 1 }, gravity: DEFAULT_GRAVITY })),
+  fc.constantFrom(...LEVEL_SAMPLE.map((i) => i + 1)).map((index) => ({ world: { kind: "builtin" as const, index, version: 1 }, gravity: DEFAULT_GRAVITY })),
   fc.constantFrom(...CUSTOM_LEVELS).map((level) => ({ world: { kind: "custom" as const, level }, gravity: DEFAULT_GRAVITY })),
   fc.tuple(arbSeed, fc.double({ min: 0.2, max: 2, noNaN: true })).map(([seed, g]) => ({ world: { kind: "chaos" as const, seed }, gravity: Math.fround(g) })),
 );
@@ -68,7 +68,7 @@ describe("exportar e importar", () => {
         const r = decodeBrainJson(encodeBrainJson(p));
         return r.ok && shape(r.value) === shape(p) && JSON.stringify(r.value.genome) === JSON.stringify(p.genome);
       }),
-      { numRuns: 200 },
+      { numRuns: runs(30, 200) },
     );
   });
 
@@ -78,7 +78,7 @@ describe("exportar e importar", () => {
         const r = decodeBrainLink(encodeBrainLink(p));
         return r.ok && shape(r.value) === shape(p) && JSON.stringify(r.value.genome) === JSON.stringify(p.genome);
       }),
-      { numRuns: 200 },
+      { numRuns: runs(30, 200) },
     );
   });
 
@@ -91,7 +91,7 @@ describe("exportar e importar", () => {
         const l = decodeBrainLink(link);
         return json === encodeBrainJson(p) && link === encodeBrainLink(p) && j.ok && l.ok && encodeBrainJson(j.value) === json && encodeBrainLink(l.value) === link;
       }),
-      { numRuns: 100 },
+      { numRuns: runs(20, 100) },
     );
   });
 
@@ -378,7 +378,7 @@ describe("fuzz: links corrompidos ou aleatórios nunca lançam nem travam", () =
           return true;
         },
       ),
-      { numRuns: 1500 },
+      { numRuns: runs(200, 1500) },
     );
   });
 
@@ -389,7 +389,7 @@ describe("fuzz: links corrompidos ou aleatórios nunca lançam nem travam", () =
         assertSafe(decodeBrainBytes(bytes));
         return true;
       }),
-      { numRuns: 1000 },
+      { numRuns: runs(150, 1000) },
     );
   });
 
@@ -407,7 +407,7 @@ describe("fuzz: links corrompidos ou aleatórios nunca lançam nem travam", () =
           return true;
         },
       ),
-      { numRuns: 1000 },
+      { numRuns: runs(150, 1000) },
     );
   });
 

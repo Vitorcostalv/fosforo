@@ -7,7 +7,7 @@ import { DEFAULT_GRAVITY } from "../lib/game/config";
 import { validateLevelData } from "../lib/game/level";
 import { BUILTIN_LEVELS } from "../lib/game/levels";
 import { validateGenome } from "../lib/neat/genome";
-import { GOLDEN_KEYS, computeGolden } from "../lib/sim/golden";
+import { GOLDEN_KEYS, GOLDEN_SCENARIOS, computeGolden } from "../lib/sim/golden";
 import {
   DEFAULT_RUN_PARAMS,
   GenerationSim,
@@ -21,7 +21,7 @@ import {
   runGeneration,
   sanitizeParams,
 } from "../lib/sim/run";
-import { arbSeed } from "./helpers";
+import { FULL, arbSeed, runs } from "./helpers";
 import { impossibleByConstruction } from "./levelgen";
 
 const level3 = BUILTIN_LEVELS[2];
@@ -41,7 +41,7 @@ describe("determinismo", () => {
         play(b, 4);
         return runDigest(a) === runDigest(b);
       }),
-      { numRuns: 6 },
+      { numRuns: runs(2, 6) },
     );
   });
 
@@ -66,7 +66,7 @@ describe("determinismo", () => {
         }
         return runDigest(direct) === runDigest(sliced);
       }),
-      { numRuns: 8 },
+      { numRuns: runs(3, 8) },
     );
   });
 
@@ -86,20 +86,23 @@ describe("determinismo", () => {
         }
         return run.population.genomes.every((g) => validateGenome(g, run.population.layout, 8).length === 0);
       }),
-      { numRuns: 12 },
+      { numRuns: runs(4, 12) },
     );
   });
 
   it("golden: um hash por fase embutida, um para o caos e um para o validador, versionados em tests/golden.json", () => {
     const file = path.join(import.meta.dirname, "golden.json");
-    const actual = computeGolden();
-    if (process.env.UPDATE_GOLDEN === "1") {
+    // Rápida: fase 1 e o caos. Completa (FULL=1): as 10 fases, o caos e o validador.
+    const subset = GOLDEN_SCENARIOS.filter((s) => ["fase-01", "caos"].includes(s.name));
+    const actual = FULL ? computeGolden() : computeGolden(subset);
+    if (process.env.UPDATE_GOLDEN === "1" && FULL) {
       fs.writeFileSync(file, JSON.stringify(actual, null, 2) + "\n");
     }
     const expected = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, string>;
-    expect(actual).toEqual(expected);
     expect(Object.keys(expected)).toEqual(GOLDEN_KEYS);
     expect(Object.keys(expected)).toHaveLength(12);
+    for (const [key, hash] of Object.entries(actual)) expect(hash, key).toBe(expected[key]);
+    expect(Object.keys(actual)).toHaveLength(FULL ? 12 : 2);
   });
 });
 
