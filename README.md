@@ -2,6 +2,8 @@
 
 Uma população de pássaros aprende a jogar Flappy Bird por evolução, no navegador, e você assiste, mexe e joga contra o melhor deles. O jogo é só o cenário: o produto é ver a evolução acontecendo.
 
+[![CI](https://github.com/Vitorcostalv/fosforo/actions/workflows/ci.yml/badge.svg)](https://github.com/Vitorcostalv/fosforo/actions/workflows/ci.yml)
+
 **Ao vivo:** https://fosforo-lab.vercel.app
 
 ![Laboratório: jogo, rede neural do melhor pássaro, gráficos e parâmetros](docs/img/laboratorio.png)
