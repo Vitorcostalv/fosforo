@@ -24,6 +24,7 @@ import {
   redo,
   removeObstacle,
   replaceLevel,
+  finalName,
   select,
   setGapHeight,
   setLength,
@@ -177,7 +178,7 @@ describe("parâmetros da run na URL", () => {
         fc.integer({ min: 0, max: 0xffffffff }),
         fc.integer({ min: 1, max: 10 }),
         fc.constantFrom("level" as const, "chaos" as const),
-        fc.integer({ min: 1, max: 500 }),
+        fc.integer({ min: 1, max: 30 }).map((n) => n * 10),
         (seed, level, mode, populationSize) => {
           const p = { ...DEFAULT_RUN_LINK, seed, level, mode, populationSize };
           return JSON.stringify(parseRunLink(formatRunLink(p))) === JSON.stringify(p);
@@ -190,11 +191,11 @@ describe("parâmetros da run na URL", () => {
     fc.assert(
       fc.property(fc.string({ maxLength: 200 }), (text) => {
         const p = parseRunLink(text);
-        return p.level >= 1 && p.level <= 10 && p.populationSize >= 1 && p.populationSize <= 500 && p.gravity >= 0.2 && p.gravity <= 2 && Number.isFinite(p.seed);
+        return p.level >= 1 && p.level <= 10 && p.populationSize >= 10 && p.populationSize <= 300 && p.gravity >= 0.2 && p.gravity <= 2 && Number.isFinite(p.seed);
       }),
       { numRuns: runs(200, 800) },
     );
-    expect(parseRunLink("seed=abc&fase=99&pop=-3&g=50&mn=2")).toMatchObject({ seed: 1, level: 10, populationSize: 1, addNodeRate: 1 });
+    expect(parseRunLink("seed=abc&fase=99&pop=-3&g=50&mn=2")).toMatchObject({ seed: 1, level: 10, populationSize: 10, addNodeRate: 1 });
     expect(parseRunLink("")).toEqual(DEFAULT_RUN_LINK);
   });
 
@@ -288,7 +289,9 @@ describe("editor de fases: estado e histórico", () => {
     e = setName(e, "  <b>Minha</b> fase!! ");
     expect(e.level.name).not.toMatch(/[<>!]/);
     e = setName(e, "***");
-    expect(e.level.name).toBe("Minha fase");
+    expect(e.level.name).toBe(""); // vazio enquanto se digita
+    expect(finalName(e.level).name).toBe("Minha fase");
+    expect(finalName({ ...e.level, name: "X" }).name).toBe("X");
     expect(setName(e, "x".repeat(99)).level.name.length).toBeLessThanOrEqual(24);
   });
 
@@ -355,6 +358,20 @@ describe("editor de fases: estado e histórico", () => {
       }),
       { numRuns: runs(80, 400) },
     );
+  });
+
+  it("edição contínua (slider, nome) vira uma entrada só no histórico", () => {
+    let e = createEditor();
+    for (let v = 3.1; v <= 6; v += 0.1) e = setSpeed(e, v);
+    expect(e.past).toHaveLength(1);
+    e = setName(setName(setName(e, "A"), "Ab"), "Abc");
+    expect(e.past).toHaveLength(2);
+    e = setGapHeight(setGapHeight(e, 0, 120), 0, 130);
+    expect(e.past).toHaveLength(3);
+    e = undo(e);
+    expect(e.level.obstacles[0].gapHeight).toBe(200);
+    e = undo(undo(e));
+    expect(e.level.speed).toBe(3);
   });
 
   it("o histórico tem limite", () => {

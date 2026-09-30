@@ -281,3 +281,29 @@ test("run estagnada (seed 1333, fase 10): mostra o aviso e 'Tentar outra seed' r
   await expect(banner).toBeHidden();
   await ctx.close();
 });
+
+test("colar outro link de run na mesma aba (hashchange) reinicia a run", async ({ browser }) => {
+  const ctx = await context(browser);
+  const page = await ctx.newPage();
+  await page.goto("/#seed=11&fase=1&modo=fase");
+  await expect(page.getByTestId("seed")).toHaveText("11");
+  await page.evaluate(() => {
+    window.location.hash = "#seed=22&fase=2&modo=fase";
+  });
+  await expect(page.getByTestId("seed")).toHaveText("22", { timeout: 10_000 });
+  await ctx.close();
+});
+
+test("link de run com fase e gravidade incompatíveis não deixa a interface sem run nem travada", async ({ browser }) => {
+  const ctx = await context(browser);
+  const page = await ctx.newPage();
+  await page.goto("/#seed=5&fase=10&g=0.2");
+  const rodando = page.getByTestId("seed").filter({ hasText: "5" });
+  const recusou = page.getByText(/Nenhuma run ativa/);
+  await expect(rodando.or(recusou)).toBeVisible({ timeout: 15_000 });
+  // Em qualquer dos dois casos, escolher outra fase recupera a interface.
+  await page.getByRole("button", { name: "Desbloquear tudo" }).click();
+  await page.getByRole("button", { name: /Largada/ }).click();
+  await expect(page.getByTestId("gen")).toBeVisible({ timeout: 15_000 });
+  await ctx.close();
+});

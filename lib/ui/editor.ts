@@ -13,6 +13,8 @@ export interface EditorState {
   future: Level[];
   /** Aviso curto da última ação recusada (ou null). */
   notice: string | null;
+  /** Chave da última edição contínua (slider, campo de texto): edições seguidas com a mesma chave viram uma só no histórico. */
+  lastKey: string | null;
 }
 
 export const HISTORY_LIMIT = 100;
@@ -30,15 +32,19 @@ export function blankLevel(name = "Minha fase"): Level {
 }
 
 export function createEditor(level: Level = blankLevel()): EditorState {
-  return { level: clone(level), selected: level.obstacles.length > 0 ? 0 : null, past: [], future: [], notice: null };
+  return { level: clone(level), selected: level.obstacles.length > 0 ? 0 : null, past: [], future: [], notice: null, lastKey: null };
 }
 
-function commit(state: EditorState, next: Level, selected: number | null = state.selected): EditorState {
+function commit(state: EditorState, next: Level, selected: number | null = state.selected, key: string | null = null): EditorState {
   const problems = validateLevelData(next);
   if (problems.length > 0) return { ...state, notice: problems[0] };
   if (JSON.stringify(next) === JSON.stringify(state.level)) return { ...state, selected, notice: null };
+  // Edição contínua (arrastar um slider, digitar): funde com a anterior em vez de encher o histórico.
+  if (key !== null && state.lastKey === key && state.past.length > 0) {
+    return { level: next, selected, past: state.past, future: [], notice: null, lastKey: key };
+  }
   const past = [...state.past, state.level].slice(-HISTORY_LIMIT);
-  return { level: next, selected, past, future: [], notice: null };
+  return { level: next, selected, past, future: [], notice: null, lastKey: key };
 }
 
 export function select(state: EditorState, index: number | null): EditorState {
@@ -92,7 +98,7 @@ export function setGapHeight(state: EditorState, i: number, height: number): Edi
   const yr = gapYRange(gapHeight);
   const next = clone(state.level);
   next.obstacles[i] = { ...o, gapHeight, gapY: clamp(o.gapY, yr.min, yr.max) };
-  return commit(state, next, i);
+  return commit(state, next, i, `gap:${i}`);
 }
 
 export function addObstacle(state: EditorState): EditorState {
@@ -138,31 +144,36 @@ export function setLength(state: EditorState, finishX: number): EditorState {
   const last = state.level.obstacles[state.level.obstacles.length - 1];
   const min = last.x + ARENA.pipeWidth + LEVEL_LIMITS.minFinishRoom;
   const next = { ...clone(state.level), finishX: Math.max(min, Math.round(finishX)) };
-  return commit(state, next);
+  return commit(state, next, state.selected, "length");
 }
 
 export function setSpeed(state: EditorState, speed: number): EditorState {
   const v = clamp(Math.round(speed * 10) / 10, LEVEL_LIMITS.minSpeed, LEVEL_LIMITS.maxSpeed);
-  return commit(state, { ...clone(state.level), speed: v });
+  return commit(state, { ...clone(state.level), speed: v }, state.selected, "speed");
 }
 
+/** Aceita nome vazio enquanto se digita; `finalName` dá o nome de reserva na hora de guardar ou treinar. */
 export function setName(state: EditorState, name: string): EditorState {
   const clean = name.replace(/[^\p{L}\p{N} ._-]/gu, "").slice(0, LEVEL_LIMITS.maxNameLength);
-  return commit(state, { ...clone(state.level), name: clean.length > 0 ? clean : "Minha fase" });
+  return commit(state, { ...clone(state.level), name: clean }, state.selected, "name");
+}
+
+export function finalName(level: Level): Level {
+  return level.name.trim().length > 0 ? level : { ...level, name: "Minha fase" };
 }
 
 export function undo(state: EditorState): EditorState {
   const previous = state.past[state.past.length - 1];
   if (!previous) return state;
   const selected = state.selected !== null ? Math.min(state.selected, previous.obstacles.length - 1) : null;
-  return { level: previous, selected, past: state.past.slice(0, -1), future: [state.level, ...state.future], notice: null };
+  return { level: previous, selected, past: state.past.slice(0, -1), future: [state.level, ...state.future], notice: null, lastKey: null };
 }
 
 export function redo(state: EditorState): EditorState {
   const [next, ...rest] = state.future;
   if (!next) return state;
   const selected = state.selected !== null ? Math.min(state.selected, next.obstacles.length - 1) : null;
-  return { level: next, selected, past: [...state.past, state.level], future: rest, notice: null };
+  return { level: next, selected, past: [...state.past, state.level], future: rest, notice: null, lastKey: null };
 }
 
 /** Troca a fase inteira (importar, carregar do armazenamento): entra no histórico como uma edição. */

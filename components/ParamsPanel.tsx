@@ -17,6 +17,7 @@ export interface ParamsPanelProps {
   onNewRun: (seed: number) => void;
   seedDraft: string;
   onSeedDraft: (value: string) => void;
+  emptyMessage: string;
 }
 
 /** Painel de parâmetros. Mudanças valem a partir da próxima geração; a velocidade vale na hora. */
@@ -107,7 +108,7 @@ export function ParamsPanel(props: ParamsPanelProps) {
             />
           </>
         ) : (
-          <p className="py-4 text-sm text-muted">Preparando a simulação...</p>
+          <p className="py-4 text-sm text-muted">{props.emptyMessage}</p>
         )}
         <p className="mt-1 flex items-start gap-2 text-xs text-muted">
           <Icon name="alert" size={14} />

@@ -19,7 +19,7 @@ export interface StartConfig {
 export type ParamChange = Partial<Omit<StartConfig, "seed">>;
 
 export type ToSim =
-  | { type: "start"; config: StartConfig; autoplay: boolean; speed: number }
+  | { type: "start"; config: StartConfig; autoplay: boolean; speed: number; runId: number }
   | { type: "play" }
   | { type: "pause" }
   | { type: "step-generation" }
@@ -46,7 +46,8 @@ export interface CourseInfo {
   wind: number[];
 }
 
-export type FromSim =
+/** Toda mensagem de uma run carrega o `runId` dela; a interface descarta as de runs antigas. */
+export type FromSim = (
   | { type: "ready" }
   | { type: "error"; message: string }
   /** Uma mudança de parâmetro foi recusada (ex.: a fase ficaria impossível com esta gravidade). */
@@ -69,20 +70,26 @@ export type FromSim =
       stats: GenerationStats;
       /** Melhor pássaro desta geração. */
       champion: Genome;
-      /** Melhor pássaro de todas as gerações (só quando mudou). */
-      bestEver?: { genome: Genome; fitness: number; generation: number };
+      /** Melhor pássaro de todas as gerações (só quando mudou), com a gravidade em que ele foi o melhor. */
+      bestEver?: { genome: Genome; fitness: number; generation: number; gravity: number };
       stagnated: boolean;
       /** Id da fase (modo fase) em que esta geração jogou, ou null (caos). */
       levelId: string | null;
-    };
+    }
+) & { runId?: number };
 
 export type ToValidator =
   | { id: number; kind: "analyze"; level: Level; gravity: number }
-  | { id: number; kind: "chaos-preview"; seed: number; gravity: number };
+  | { id: number; kind: "chaos-preview"; seed: number; gravity: number }
+  /** Valida um link/JSON de cérebro ou de fase fora do thread da interface (o validador de viabilidade pode levar ~1 s). */
+  | { id: number; kind: "decode-brain"; format: "link" | "json"; text: string }
+  | { id: number; kind: "decode-level"; format: "link" | "json"; text: string; gravity: number };
 
 export type FromValidator =
   | { id: number; kind: "analyze"; report: import("../ui/viability").ViabilityReport; ms: number }
   | { id: number; kind: "chaos-preview"; obstacles: number; ms: number }
+  | { id: number; kind: "decode-brain"; result: import("./link").DecodeResult; ms: number }
+  | { id: number; kind: "decode-level"; result: import("./levelCodec").LevelDecodeResult; ms: number }
   | { id: number; kind: "error"; message: string };
 
 /** Fatia de simulação por passagem do laço do Worker, em ms. */

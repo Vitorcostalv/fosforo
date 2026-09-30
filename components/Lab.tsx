@@ -7,9 +7,8 @@ import type { Level } from "@/lib/game/level";
 import { BUILTIN_LEVELS, builtinIndex, getBuiltinLevel } from "@/lib/game/levels";
 import type { Genome } from "@/lib/neat/genome";
 import { deriveSeed } from "@/lib/neat/rng";
-import { BrainEnv, BrainPayload, WorldRef, decodeBrainLink } from "@/lib/sim/link";
+import { BrainEnv, BrainPayload, WorldRef } from "@/lib/sim/link";
 import { resolveCourse } from "@/lib/sim/env";
-import { decodeLevelLink } from "@/lib/sim/levelCodec";
 import type { StartConfig } from "@/lib/sim/protocol";
 import { EMPTY_PROGRESS, PROGRESS_KEY, Progress, markCompleted, parseProgress, serializeProgress, setUnlockAll } from "@/lib/ui/progress";
 import { DEFAULT_RUN_LINK, formatRunLink, fragmentKind, fragmentValue, parseRunLink } from "@/lib/ui/runLink";
@@ -62,12 +61,17 @@ function randomUint32(): number {
   return buf[0];
 }
 
-function worldOfRun(config: StartConfig, choice: LevelChoice, generation: number): WorldRef {
+/** Qual fase/modo a run REALMENTE está jogando (vem do Worker, não do que a interface pediu por último). */
+function choiceOf(params: StartConfig): LevelChoice {
+  if (params.mode === "chaos") return { kind: "chaos" };
+  const n = builtinIndex(params.level.id);
+  return n > 0 ? { kind: "builtin", index: n } : { kind: "custom" };
+}
+
+function worldOfRun(config: StartConfig, generation: number): WorldRef {
   if (config.mode === "chaos") return { kind: "chaos", seed: deriveSeed(config.seed, 1000 + generation) };
-  if (choice.kind === "builtin") {
-    const level = getBuiltinLevel(choice.index) as Level;
-    return { kind: "builtin", index: choice.index, version: level.version };
-  }
+  const n = builtinIndex(config.level.id);
+  if (n > 0) return { kind: "builtin", index: n, version: config.level.version };
   return { kind: "custom", level: config.level };
 }
 
@@ -82,6 +86,8 @@ export function Lab() {
   const [progress, setProgress] = useState<Progress>(EMPTY_PROGRESS);
   const [storageOk, setStorageOk] = useState(true);
   const [choice, setChoice] = useState<LevelChoice>({ kind: "builtin", index: 1 });
+  /** A fase/modo que a run está jogando de verdade (o Worker manda; `choice` só vale antes da primeira resposta). */
+  const active: LevelChoice = status ? choiceOf(status.params) : choice;
   const [customLevel, setCustomLevel] = useState<Level | null>(null);
   const [seedDraft, setSeedDraft] = useState(String(DEFAULTS.seed));
   const [screen, setScreen] = useState<"lab" | "editor">("lab");
@@ -97,6 +103,9 @@ export function Lab() {
   const [live, setLive] = useState({ alive: 0, tick: 0, population: 0 });
 
   const initialConfig = useRef<StartConfig>(DEFAULTS);
+  /** Velocidade escolhida pela pessoa: vale em todo início de run, mesmo se ela clicar antes do Worker ficar pronto. */
+  const speedRef = useRef(1);
+  const [speedChoice, setSpeedChoice] = useState(1);
   const booted = useRef(false);
   const matchCounter = useRef(0);
 
@@ -125,10 +134,10 @@ export function Lab() {
       initialConfig.current = config;
       setSeedDraft(String(config.seed));
       setMatch(null);
-      sim.start(config, autoplay, status?.speed ?? 1);
+      sim.start(config, autoplay, speedRef.current);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sim.start, reduced, status?.speed],
+    [sim.start, reduced],
   );
 
   const currentConfig = useCallback((): StartConfig => status?.params ?? DEFAULTS, [status]);
@@ -153,47 +162,73 @@ export function Lab() {
     setTab("game");
   }, []);
 
-  /* ---------- Inicialização a partir do link ---------- */
+  /* ---------- Links: #seed=... (run), #b=... (cérebro) e #f=... (fase) ---------- */
+  const applyHash = useCallback(
+    (hash: string, first: boolean): void => {
+      const kind = fragmentKind(hash);
+      const autoplay = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (kind === "run" || first) {
+        let config = DEFAULTS;
+        if (kind === "run") {
+          const p = parseRunLink(hash);
+          config = { ...DEFAULTS, seed: p.seed, populationSize: p.populationSize, weightMutationRate: p.weightMutationRate, addNodeRate: p.addNodeRate, addConnectionRate: p.addConnectionRate, gravity: p.gravity, mode: p.mode, level: getBuiltinLevel(p.level) as Level };
+          setChoice(choiceOf(config));
+        }
+        initialConfig.current = config;
+        setSeedDraft(String(config.seed));
+        setMatch(null);
+        setScreen("lab");
+        sim.start(config, autoplay, speedRef.current);
+      }
+      // Cérebro e fase vindos de fora passam pelo validador de viabilidade, num Worker: pode levar mais de 1 s.
+      if (kind === "brain") {
+        setLinkNotice({ tone: "info", text: "Validando o cérebro do link..." });
+        void validator.decodeBrain("link", fragmentValue(hash, "b")).then((decoded) => {
+          if (decoded.ok) {
+            openImported(decoded.value);
+            setLinkNotice({ tone: "info", text: "Cérebro carregado do link. Jogue contra ele no painel do jogo." });
+          } else {
+            setLinkNotice({ tone: "error", text: decoded.message });
+          }
+        });
+      } else if (kind === "level") {
+        setLinkNotice({ tone: "info", text: "Validando a fase do link..." });
+        void validator.decodeLevel("link", fragmentValue(hash, "f"), DEFAULT_GRAVITY).then((decoded) => {
+          if (decoded.ok) {
+            setEditorLevel(decoded.level);
+            setScreen("editor");
+            setLinkNotice({ tone: "info", text: "Fase carregada do link e validada. Teste, edite ou treine nela." });
+          } else {
+            setLinkNotice({ tone: "error", text: decoded.message });
+          }
+        });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sim.start, validator.decodeBrain, validator.decodeLevel, openImported],
+  );
+  const applyHashRef = useRef(applyHash);
+  useEffect(() => {
+    applyHashRef.current = applyHash;
+  });
+
   useEffect(() => {
     if (!view.ready || booted.current) return;
     const timer = setTimeout(() => {
-    booted.current = true;
-    const hash = window.location.hash;
-    const kind = fragmentKind(hash);
-    let config = DEFAULTS;
-    const autoplay = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (kind === "run") {
-      const p = parseRunLink(hash);
-      config = { ...DEFAULTS, seed: p.seed, populationSize: p.populationSize, weightMutationRate: p.weightMutationRate, addNodeRate: p.addNodeRate, addConnectionRate: p.addConnectionRate, gravity: p.gravity, mode: p.mode, level: getBuiltinLevel(p.level) as Level };
-      setChoice(p.mode === "chaos" ? { kind: "chaos" } : { kind: "builtin", index: p.level });
-    }
-    initialConfig.current = config;
-    setSeedDraft(String(config.seed));
-    sim.start(config, autoplay, 1);
-
-    if (kind === "brain") {
-      const decoded = decodeBrainLink(fragmentValue(hash, "b"));
-      if (decoded.ok) {
-        openImported(decoded.value);
-        setLinkNotice({ tone: "info", text: "Cérebro carregado do link. Jogue contra ele no painel do jogo." });
-      } else {
-        setLinkNotice({ tone: "error", text: decoded.message });
-      }
-    } else if (kind === "level") {
-      const decoded = decodeLevelLink(fragmentValue(hash, "f"));
-      if (decoded.ok) {
-        setEditorLevel(decoded.level);
-        setScreen("editor");
-        setLinkNotice({ tone: "info", text: "Fase carregada do link e validada. Teste, edite ou treine nela." });
-      } else {
-        setLinkNotice({ tone: "error", text: decoded.message });
-      }
-    }
+      booted.current = true;
+      applyHashRef.current(window.location.hash, true);
     }, 0);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.ready]);
+
+  // Colar outro link na mesma aba também vale.
+  useEffect(() => {
+    const onHash = (): void => {
+      if (booted.current && fragmentKind(window.location.hash) !== "none") applyHashRef.current(window.location.hash, false);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   /* ---------- Placar ao vivo (10 vezes por segundo, fora do laço de desenho) ---------- */
   useEffect(() => {
@@ -245,9 +280,10 @@ export function Lab() {
 
   const payload: BrainPayload | null = useMemo(() => {
     if (!view.bestEver || !status) return null;
-    const env: BrainEnv = { gravity: status.params.gravity, world: worldOfRun(status.params, choice, view.bestEver.generation) };
+    // A gravidade é a do momento em que este pássaro foi o melhor, não a de agora.
+    const env: BrainEnv = { gravity: view.bestEver.gravity, world: worldOfRun({ ...status.params, gravity: view.bestEver.gravity }, view.bestEver.generation) };
     return { genome: view.bestEver.genome, env };
-  }, [view.bestEver, status, choice]);
+  }, [view.bestEver, status]);
 
   const startMatch = (): void => {
     if (!payload || !status) return;
@@ -260,7 +296,7 @@ export function Lab() {
       course,
       gravity: payload.env.gravity,
       title: status.params.mode === "chaos" ? "Você contra o melhor pássaro · caos" : `Você contra o melhor pássaro · ${status.params.level.name}`,
-      builtin: status.params.mode === "level" && choice.kind === "builtin" ? choice.index : null,
+      builtin: active.kind === "builtin" ? active.index : null,
       runId: ++matchCounter.current,
     });
   };
@@ -272,10 +308,15 @@ export function Lab() {
 
   const copyRunLink = async (): Promise<void> => {
     const c = initialConfig.current;
-    const fase = choice.kind === "builtin" ? choice.index : 1;
+    const fase = active.kind === "builtin" ? active.index : 1;
     const link = formatRunLink({ seed: c.seed, level: fase, mode: c.mode, gravity: c.gravity, populationSize: c.populationSize, addNodeRate: c.addNodeRate, addConnectionRate: c.addConnectionRate, weightMutationRate: c.weightMutationRate });
     const url = `${window.location.origin}${window.location.pathname}#${link}`;
-    setCopied((await copyText(url)) ? "Link da run copiado." : url);
+    if (await copyText(url)) {
+      setCopied("Link da run copiado.");
+      setTimeout(() => setCopied(null), 5000);
+    } else {
+      setCopied(url);
+    }
   };
 
   const running = status?.running ?? false;
@@ -287,7 +328,7 @@ export function Lab() {
   /* ---------- Editor ---------- */
   if (screen === "editor") {
     return (
-      <Shell status={status} onCopyRun={copyRunLink} copied={copied} choice={choice}>
+      <Shell status={status} onCopyRun={copyRunLink} copied={copied} choice={active}>
         <div className="mx-auto w-full max-w-[1680px]">
           {linkNotice ? (
             <div className="mb-px">
@@ -299,9 +340,14 @@ export function Lab() {
           <LevelEditor
             initial={editorLevel ?? customLevel}
             gravity={status?.params.gravity ?? DEFAULT_GRAVITY}
-            onClose={() => setScreen("lab")}
+            onClose={(draft) => {
+              setEditorLevel(draft);
+              setScreen("lab");
+            }}
+            decodeLevel={validator.decodeLevel}
             onTrain={(level) => {
               setCustomLevel(level);
+              setEditorLevel(level);
               setChoice({ kind: "custom" });
               setScreen("lab");
               startRun({ ...currentConfig(), mode: "level", level });
@@ -313,7 +359,7 @@ export function Lab() {
   }
 
   return (
-    <Shell status={status} onCopyRun={copyRunLink} copied={copied} choice={choice}>
+    <Shell status={status} onCopyRun={copyRunLink} copied={copied} choice={active}>
       <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-px">
         {view.error ? (
           <Banner tone="error" role="alert" onDismiss={sim.dismissNotice}>
@@ -440,21 +486,26 @@ export function Lab() {
             <div id="panel-params" role="tabpanel" aria-labelledby="tab-params" className={`bg-ground ${vis("params")}`}>
               <ParamsPanel
                 params={status?.params ?? null}
-                speed={status?.speed ?? 1}
+                speed={speedChoice}
                 running={running}
                 chaosObstacles={chaosResult?.key === chaosKey ? chaosResult.obstacles : null}
                 chaosBusy={chaosResult?.key !== chaosKey}
                 onChange={sim.changeParams}
-                onSpeed={sim.setSpeed}
+                onSpeed={(v) => {
+                  speedRef.current = v;
+                  setSpeedChoice(v);
+                  sim.setSpeed(v);
+                }}
                 onNewRun={newSeed}
                 seedDraft={seedDraft}
                 onSeedDraft={setSeedDraft}
+                emptyMessage={view.error ? "Nenhuma run ativa. Escolha uma fase ao lado." : "Preparando a simulação..."}
               />
             </div>
             <div id="panel-levels" role="tabpanel" aria-labelledby="tab-levels" className={`grid gap-px bg-ground ${vis("levels")}`}>
               <LevelsPanel
                 progress={progress}
-                choice={choice}
+                choice={active}
                 customName={customLevel?.name ?? null}
                 storageOk={storageOk}
                 onChoose={chooseLevel}
@@ -466,6 +517,7 @@ export function Lab() {
               />
               <BrainShare
                 payload={payload}
+                decode={validator.decodeBrain}
                 onImport={(p) => {
                   openImported(p);
                 }}
@@ -476,7 +528,7 @@ export function Lab() {
       </div>
 
       {/* Abas do celular */}
-      <nav aria-label="Seções" className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface md:hidden">
+      <nav aria-label="Seções" className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
         <Tabs tabs={TABS} active={tab} onChange={setTab} label="Seções do laboratório" className="flex" />
       </nav>
     </Shell>
@@ -553,9 +605,13 @@ function Shell({
             <button type="button" className="btn" onClick={onCopyRun} disabled={!status || choice.kind === "custom"} title={choice.kind === "custom" ? "Fase própria: use o link da fase, no editor" : "Copia os parâmetros iniciais da run"}>
               <Icon name="link" /> Copiar link da run
             </button>
-            <span role="status" aria-live="polite" className="max-w-xs truncate text-xs text-muted">
-              {copied}
-            </span>
+            {copied && copied.startsWith("http") ? (
+              <input readOnly aria-label="Link da run (copie manualmente)" className="num min-h-9 w-64 border border-line bg-ground px-2 text-xs" value={copied} onFocus={(e) => e.currentTarget.select()} />
+            ) : (
+              <span role="status" aria-live="polite" className="max-w-xs text-xs text-muted">
+                {copied}
+              </span>
+            )}
           </div>
         </div>
       </header>

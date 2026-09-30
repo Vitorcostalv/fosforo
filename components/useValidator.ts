@@ -6,7 +6,12 @@ import type { FromValidator, ToValidator } from "@/lib/sim/protocol";
 import type { ViabilityReport } from "@/lib/ui/viability";
 
 type Pending = { resolve: (value: FromValidator) => void };
-type AskMessage = { kind: "analyze"; level: Level; gravity: number } | { kind: "chaos-preview"; seed: number; gravity: number };
+const FAIL = { ok: false as const, code: "formato-invalido" as const, message: "O validador não respondeu. Tente de novo." };
+type AskMessage =
+  | { kind: "analyze"; level: Level; gravity: number }
+  | { kind: "chaos-preview"; seed: number; gravity: number }
+  | { kind: "decode-brain"; format: "link" | "json"; text: string }
+  | { kind: "decode-level"; format: "link" | "json"; text: string; gravity: number };
 
 /**
  * Worker do validador: o editor pergunta "essa fase é viável?" e o caos pergunta "quantos canos
@@ -73,5 +78,25 @@ export function useValidator() {
     [ask],
   );
 
-  return { analyze, chaosPreview, latestId: () => counter.current };
+
+  /** Decodifica e valida (inclusive viabilidade) um cérebro colado, aberto de arquivo ou vindo da URL. */
+  const decodeBrain = useCallback(
+    async (format: "link" | "json", text: string): Promise<import("@/lib/sim/link").DecodeResult> => {
+      const { result } = ask({ kind: "decode-brain", format, text });
+      const r = await result;
+      return r.kind === "decode-brain" ? r.result : FAIL;
+    },
+    [ask],
+  );
+
+  const decodeLevel = useCallback(
+    async (format: "link" | "json", text: string, gravity: number): Promise<import("@/lib/sim/levelCodec").LevelDecodeResult> => {
+      const { result } = ask({ kind: "decode-level", format, text, gravity });
+      const r = await result;
+      return r.kind === "decode-level" ? r.result : { ok: false, code: "formato-invalido", message: FAIL.message };
+    },
+    [ask],
+  );
+
+  return { analyze, chaosPreview, decodeBrain, decodeLevel, latestId: () => counter.current };
 }

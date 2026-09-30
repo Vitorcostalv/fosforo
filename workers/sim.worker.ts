@@ -42,8 +42,10 @@ let lastPump = 0;
 let lastFrame = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let bestEverFitness = -Infinity;
+let currentRunId = 0;
 
-const post = (message: FromSim, transfer?: Transferable[]): void => ctx.postMessage(message, transfer);
+/** Toda mensagem sai carimbada com o id da run; a interface descarta as de runs antigas. */
+const post = (message: FromSim, transfer?: Transferable[]): void => ctx.postMessage({ ...message, runId: currentRunId }, transfer);
 
 function paramsOf(r: Run): StartConfig {
   const p = r.params;
@@ -118,6 +120,7 @@ function completeGeneration(): void {
   if (!run || !sim) return;
   sendFrame(true);
   const generation = run.population.generation;
+  const gravityPlayed = sim.world.gravity;
   const levelPlayed = run.params.mode === "level" ? run.params.level.id : null;
   const stats = finishGeneration(run, sim);
   const champion = run.best as Genome;
@@ -130,9 +133,10 @@ function completeGeneration(): void {
   };
   if (stats.maxFitness > bestEverFitness) {
     bestEverFitness = stats.maxFitness;
-    message.bestEver = { genome: champion, fitness: stats.maxFitness, generation };
+    message.bestEver = { genome: champion, fitness: stats.maxFitness, generation, gravity: gravityPlayed };
   }
-  message.stagnated = isStagnated(run.history);
+  // No caos cada geração joga um percurso diferente: fitness de gerações distintas não é comparável.
+  message.stagnated = run.params.mode === "level" && isStagnated(run.history);
   post(message);
   sim = null;
   startGeneration();
@@ -142,6 +146,17 @@ function completeGeneration(): void {
 function pump(): void {
   timer = null;
   if (!running || !run) return;
+  try {
+    pumpOnce();
+  } catch (error) {
+    running = false;
+    post({ type: "error", message: `A simulação parou por um erro interno: ${error instanceof Error ? error.message : String(error)}` });
+    if (run) post({ type: "status", status: status() });
+  }
+}
+
+function pumpOnce(): void {
+  if (!run) return;
   if (!sim) startGeneration();
   const now = performance.now();
   const elapsed = Math.min(100, now - lastPump);
@@ -159,7 +174,7 @@ function pump(): void {
     }
     if (performance.now() > deadline) break;
   }
-  carry += ticks; // ticks que não coube no orçamento de tempo voltam para a próxima fatia
+  carry = Math.min(MAX_TICKS_PER_SLICE, carry + ticks); // o que não coube no orçamento volta para a próxima fatia, com teto
   sendFrame();
   timer = setTimeout(pump, 0);
 }
@@ -178,7 +193,16 @@ function stepWholeGeneration(): void {
   completeGeneration();
 }
 
-function begin(config: StartConfig, autoplay: boolean, initialSpeed: number): void {
+function begin(config: StartConfig, autoplay: boolean, initialSpeed: number, runId: number): void {
+  // A run antiga acaba aqui, tenha o novo início dado certo ou não: a interface nunca fica com duas verdades.
+  currentRunId = runId;
+  run = null;
+  sim = null;
+  running = false;
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
+  }
   const params = sanitizeParams(config);
   const check = checkRunParams(params);
   if (!check.ok) {
@@ -202,6 +226,7 @@ function change(delta: ParamChange): void {
   const check = checkRunParams(candidate);
   if (!check.ok) {
     post({ type: "rejected", message: check.message });
+    post({ type: "status", status: status() }); // a interface volta ao valor que está valendo
     return;
   }
   applyParams(run, delta);
@@ -213,7 +238,7 @@ ctx.onmessage = (event) => {
   try {
     switch (msg.type) {
       case "start":
-        begin(msg.config, msg.autoplay, msg.speed);
+        begin(msg.config, msg.autoplay, msg.speed, msg.runId);
         break;
       case "play":
         running = true;

@@ -18,6 +18,8 @@ export interface BestEver {
   genome: Genome;
   fitness: number;
   generation: number;
+  /** Gravidade em que este pássaro foi o melhor (o ambiente do link tem de ser esta). */
+  gravity: number;
 }
 
 export interface SimView {
@@ -58,6 +60,7 @@ export function useSim(options: { onSolved?: (levelId: string) => void } = {}) {
   const workerRef = useRef<Worker | null>(null);
   const frameRef = useRef<LiveFrame | null>(null);
   const [view, setView] = useState<SimView>(INITIAL);
+  const runIdRef = useRef(0);
   const optionsRef = useRef(options);
   useEffect(() => {
     optionsRef.current = options;
@@ -75,6 +78,8 @@ export function useSim(options: { onSolved?: (levelId: string) => void } = {}) {
 
     worker.onmessage = (event: MessageEvent<FromSim>) => {
       const msg = event.data;
+      // Mensagens de uma run que já foi substituída chegam atrasadas: descarta.
+      if (msg.runId !== undefined && msg.runId !== runIdRef.current) return;
       switch (msg.type) {
         case "ready":
           setView((v) => ({ ...v, ready: true }));
@@ -123,7 +128,8 @@ export function useSim(options: { onSolved?: (levelId: string) => void } = {}) {
     (config: StartConfig, autoplay: boolean, speed: number) => {
       frameRef.current = null;
       setView((v) => ({ ...INITIAL, ready: v.ready, status: null }));
-      send({ type: "start", config, autoplay, speed });
+      runIdRef.current += 1;
+      send({ type: "start", config, autoplay, speed, runId: runIdRef.current });
     },
     [send],
   );

@@ -53,7 +53,7 @@ export function parseRunLink(fragment: string): RunLinkParams {
     level: Math.round(between(num(q.get("fase")), 1, LEVEL_COUNT, d.level)),
     mode: q.get("modo") === "caos" ? "chaos" : "level",
     gravity: Math.fround(between(num(q.get("g")), 0.2, 2, d.gravity)),
-    populationSize: Math.round(between(num(q.get("pop")), 1, 500, d.populationSize)),
+    populationSize: Math.round(between(num(q.get("pop")), 10, 300, d.populationSize) / 10) * 10,
     addNodeRate: between(num(q.get("mn")), 0, 1, d.addNodeRate),
     addConnectionRate: between(num(q.get("mc")), 0, 1, d.addConnectionRate),
     weightMutationRate: between(num(q.get("mw")), 0, 1, d.weightMutationRate),

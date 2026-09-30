@@ -189,8 +189,13 @@ export function PlayCanvas({
 
     const onKey = (e: KeyboardEvent): void => {
       if (e.code !== "Space" && e.code !== "ArrowUp" && e.code !== "KeyW") return;
+      if (e.defaultPrevented) return;
+      // Só quando o foco está no corpo da página ou no próprio canvas: nunca "sequestra" a tecla de
+      // um botão, aba, controle deslizante, campo de texto ou da régua do editor.
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
+      if (target && target !== document.body && target !== canvasRef.current) return;
+      // Um canvas escondido (outra aba no celular) não escuta.
+      if (!canvasRef.current || canvasRef.current.getClientRects().length === 0) return;
       e.preventDefault();
       if (e.repeat) return;
       if (finished) return;

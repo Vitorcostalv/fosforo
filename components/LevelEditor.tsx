@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ARENA } from "@/lib/game/config";
 import { courseOf } from "@/lib/game/course";
 import { LEVEL_LIMITS, Level } from "@/lib/game/level";
-import { decodeLevelJson, decodeLevelLink, encodeLevelJson, encodeLevelLink } from "@/lib/sim/levelCodec";
+import { LevelDecodeResult, encodeLevelJson, encodeLevelLink } from "@/lib/sim/levelCodec";
 import {
   EditorState,
   NUDGE_STEP,
   NUDGE_STEP_FAST,
   addObstacle,
   createEditor,
+  finalName,
   gapYRange,
   insertObstacleAt,
   moveObstacle,
@@ -55,11 +56,14 @@ export function LevelEditor({
   gravity,
   onClose,
   onTrain,
+  decodeLevel,
 }: {
   initial: Level | null;
   gravity: number;
-  onClose: () => void;
+  /** Devolve a fase como está no editor, para não perder a edição ao fechar. */
+  onClose: (draft: Level) => void;
   onTrain: (level: Level) => void;
+  decodeLevel: (format: "link" | "json", text: string, gravity: number) => Promise<LevelDecodeResult>;
 }) {
   const [ed, setEd] = useState<EditorState>(() => createEditor(initial ?? undefined));
   const [ghost, setGhost] = useState<EditorState | null>(null);
@@ -73,6 +77,7 @@ export function LevelEditor({
   const [testScore, setTestScore] = useState<PlayScore | null>(null);
   const [testResult, setTestResult] = useState<PlayResult | null>(null);
   const [importText, setImportText] = useState("");
+  const [confirmOverwrite, setConfirmOverwrite] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const validator = useValidator();
@@ -241,36 +246,47 @@ export function LevelEditor({
 
   const onSave = (): void => {
     if (!viable) return;
-    const r = saveLevel(saved, ed.level);
+    const toSave = finalName(ed.level);
+    if (saved.some((s) => s.name === toSave.name) && confirmOverwrite !== toSave.name) {
+      setConfirmOverwrite(toSave.name);
+      setMessage({ tone: "error", text: `Já existe uma fase guardada chamada "${toSave.name}". Aperte Guardar de novo para substituir, ou mude o nome.` });
+      return;
+    }
+    setConfirmOverwrite(null);
+    const r = saveLevel(saved, toSave);
     if (!r.ok) {
       setMessage({ tone: "error", text: "Você já tem 20 fases guardadas. Apague uma para guardar outra." });
       return;
     }
     setSaved(r.list);
     persist(r.list);
-    setMessage({ tone: "ok", text: `Fase "${ed.level.name}" guardada neste navegador.` });
+    setMessage({ tone: "ok", text: `Fase "${toSave.name}" guardada neste navegador.` });
   };
 
   const onExport = (): void => {
     if (!viable) return;
-    const blob = new Blob([encodeLevelJson(ed.level)], { type: "application/json" });
+    const blob = new Blob([encodeLevelJson(finalName(ed.level))], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `fosforo-fase-${ed.level.name.replace(/\s+/g, "-").toLowerCase()}.json`;
+    a.download = `fosforo-fase-${finalName(ed.level).name.replace(/\s+/g, "-").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
 
   const onCopyLink = async (): Promise<void> => {
     if (!viable) return;
-    const url = `${window.location.origin}${window.location.pathname}#f=${encodeLevelLink(ed.level)}`;
+    const url = `${window.location.origin}${window.location.pathname}#f=${encodeLevelLink(finalName(ed.level))}`;
     setMessage((await copyText(url)) ? { tone: "ok", text: "Link da fase copiado." } : { tone: "error", text: url });
   };
 
-  const onImport = (text: string): void => {
+  const onImport = async (text: string): Promise<void> => {
     const t = text.trim();
     const hash = t.includes("#") ? t.slice(t.indexOf("#")) : t.startsWith("f=") ? `#${t}` : `#f=${t}`;
-    const result = t.startsWith("{") ? decodeLevelJson(t, gravity) : fragmentKind(hash) === "level" ? decodeLevelLink(fragmentValue(hash, "f"), gravity) : decodeLevelLink("", gravity);
+    setMessage({ tone: "ok", text: "Validando a fase..." });
+    // A validação de viabilidade roda num Worker: pode levar mais de 1 s numa fase longa.
+    const result = t.startsWith("{")
+      ? await decodeLevel("json", t, gravity)
+      : await decodeLevel("link", fragmentKind(hash) === "level" ? fragmentValue(hash, "f") : "", gravity);
     if (result.ok) {
       apply(replaceLevel(ed, result.level), "Fase importada.");
       setImportText("");
@@ -304,7 +320,7 @@ export function LevelEditor({
                 <button type="button" className="btn" onClick={() => apply(redo(ed), "Refeito.")} disabled={ed.future.length === 0} aria-label="Refazer (Ctrl+Y)">
                   <Icon name="redo" /> Refazer
                 </button>
-                <button type="button" className="btn" onClick={onClose}>
+                <button type="button" className="btn" onClick={() => onClose(ed.level)}>
                   <Icon name="close" /> Fechar editor
                 </button>
               </div>
@@ -330,7 +346,10 @@ export function LevelEditor({
               onKeyDown={step}
               onPointerMove={onPointerMove}
               onPointerUp={endDrag}
-              onPointerCancel={endDrag}
+              onPointerCancel={() => {
+                dragRef.current = null;
+                setGhost(null);
+              }}
               data-testid="editor-ruler"
             >
               <defs>
@@ -494,7 +513,7 @@ export function LevelEditor({
             <button type="button" className="btn" onClick={() => setTesting((t) => !t)}>
               <Icon name="play" /> {testing ? "Fechar teste" : "Testar jogando"}
             </button>
-            <button type="button" className="btn btn-primary" aria-disabled={!viable} disabled={!viable} onClick={() => viable && onTrain(ed.level)}>
+            <button type="button" className="btn btn-primary" aria-disabled={!viable} disabled={!viable} onClick={() => viable && onTrain(finalName(ed.level))}>
               <Icon name="flag" /> Treinar a IA nesta fase
             </button>
             {!viable ? <p className="text-xs text-muted">Treinar, guardar e compartilhar ficam liberados quando a fase for viável.</p> : null}
@@ -514,7 +533,7 @@ export function LevelEditor({
                 Importar link ou JSON
               </label>
               <textarea id="level-import" className="num mt-1 min-h-14 w-full resize-y border border-line bg-ground p-2 text-xs" value={importText} spellCheck={false} placeholder="Cole aqui o link (#f=...) ou o JSON" onChange={(e) => setImportText(e.target.value)} />
-              <button type="button" className="btn mt-1" disabled={importText.trim() === ""} onClick={() => onImport(importText)}>
+              <button type="button" className="btn mt-1" disabled={importText.trim() === ""} onClick={() => void onImport(importText)}>
                 <Icon name="upload" /> Carregar fase
               </button>
             </div>

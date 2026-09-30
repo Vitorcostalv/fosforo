@@ -140,8 +140,8 @@ Instrumento, não app de consumo: cantos quase retos. `rounded.sm` (2px) em cont
 | Vazio (sem run) | Painéis mostram a grade e uma frase curta: "Nenhuma geração ainda. Aperte Iniciar." |
 | Carregando (Worker iniciando, link sendo validado) | Esqueleto de linhas de grade; texto "Preparando a simulação..."; sem spinner giratório. |
 | Erro (link ou arquivo inválido) | Mensagem em `error` com ícone em traço e a causa em português ("Este cérebro foi treinado no motor v1..."), mais a ação possível. |
-| Travado (run estagnada) | Banner com `warning`: "Esta run estagnou. Tente outra seed." e botão. |
-| Bloqueado (fase) | Cadeado em traço, texto "Complete a fase N para liberar", `aria-disabled`, e o atalho "Desbloquear tudo". |
+| Travado (run estagnada) | Banner com `warning`: "Esta run estagnou. Tente outra seed." e botão "Tentar outra seed". Só no modo fase (no caos cada geração joga um percurso diferente e o fitness não é comparável). |
+| Bloqueado (fase) | Cadeado em traço no canto da célula, número e nome em `text-faint`, `aria-disabled`, dica ao passar o mouse ("Complete a fase N para liberar"), a mesma frase no texto para leitores de tela e uma nota fixa abaixo da grade; mais o atalho "Desbloquear tudo". A célula é pequena demais para caber a frase escrita. |
 | Inviável (editor) | Moldura `error` tracejada, trecho destacado e motivo: "faltou espaço" ou "abaixo da folga mínima de 2". |
 
 ## Decisions Log
@@ -149,4 +149,5 @@ Instrumento, não app de consumo: cantos quase retos. `rounded.sm` (2px) em cont
 |------|----------|-----------|
 | 2026-09-30 | Sistema criado a partir do briefing do Vitor | Direção dada: painel de instrumento, grafite, um âmbar, mono tabular, sem clichês de IA. Fontes escolhidas fora das listas de sobreusadas. |
 | 2026-09-30 | Pesos negativos = cinza-aço tracejado | Manter um único acento e não depender só de cor (acessibilidade). |
+| 2026-09-30 | Fonte do título: "Big Shoulders" | O Google Fonts fundiu o corte Display na família Big Shoulders (eixo `opsz`); usamos o peso 800. |
 | 2026-09-30 | Sem sombras, sem tema claro no MVP | Profundidade por tom e linha; escuro reforça o efeito de fósforo. |

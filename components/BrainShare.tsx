@@ -1,19 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BrainPayload, decodeBrainJson, decodeBrainLink, encodeBrainJson, encodeBrainLink } from "@/lib/sim/link";
+import { BrainPayload, DecodeResult, encodeBrainJson, encodeBrainLink } from "@/lib/sim/link";
 import { fragmentKind, fragmentValue } from "@/lib/ui/runLink";
 import { Icon, PanelTitle } from "./ui";
 
 type Message = { tone: "ok" | "error"; text: string } | null;
 
-/** Aceita JSON, o link inteiro ou só o trecho depois de `#b=`. */
-export function parseBrainInput(text: string) {
+/** Aceita JSON, o link inteiro ou só o trecho depois de `#b=`. Só separa o formato; quem valida é o Worker. */
+export function classifyBrainInput(text: string): { format: "json" | "link"; text: string } {
   const t = text.trim();
-  if (t.startsWith("{")) return decodeBrainJson(t);
+  if (t.startsWith("{")) return { format: "json", text: t };
   const hash = t.includes("#") ? t.slice(t.indexOf("#")) : t.startsWith("b=") ? `#${t}` : `#b=${t}`;
-  if (fragmentKind(hash) !== "brain") return decodeBrainLink("");
-  return decodeBrainLink(fragmentValue(hash, "b"));
+  return { format: "link", text: fragmentKind(hash) === "brain" ? fragmentValue(hash, "b") : "" };
 }
 
 export function copyText(text: string): Promise<boolean> {
@@ -28,7 +27,15 @@ export function brainLinkUrl(payload: BrainPayload): string {
 }
 
 /** Exportar e importar o cérebro: link compartilhável, JSON e arquivo. */
-export function BrainShare({ payload, onImport }: { payload: BrainPayload | null; onImport: (p: BrainPayload) => void }) {
+export function BrainShare({
+  payload,
+  onImport,
+  decode,
+}: {
+  payload: BrainPayload | null;
+  onImport: (p: BrainPayload) => void;
+  decode: (format: "link" | "json", text: string) => Promise<DecodeResult>;
+}) {
   const [message, setMessage] = useState<Message>(null);
   const [text, setText] = useState("");
   const [shown, setShown] = useState<string | null>(null);
@@ -57,8 +64,10 @@ export function BrainShare({ payload, onImport }: { payload: BrainPayload | null
     setMessage({ tone: "ok", text: "Arquivo baixado." });
   };
 
-  const load = (input: string): void => {
-    const result = parseBrainInput(input);
+  const load = async (input: string): Promise<void> => {
+    setMessage({ tone: "ok", text: "Validando o cérebro..." });
+    const { format, text: body } = classifyBrainInput(input);
+    const result = await decode(format, body);
     if (result.ok) {
       setMessage({ tone: "ok", text: "Cérebro carregado. Jogue contra ele no painel do jogo." });
       setText("");
@@ -98,7 +107,7 @@ export function BrainShare({ payload, onImport }: { payload: BrainPayload | null
             onChange={(e) => setText(e.target.value)}
           />
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className="btn" disabled={text.trim() === ""} onClick={() => load(text)}>
+            <button type="button" className="btn" disabled={text.trim() === ""} onClick={() => void load(text)}>
               <Icon name="upload" /> Carregar
             </button>
             <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
@@ -118,7 +127,7 @@ export function BrainShare({ payload, onImport }: { payload: BrainPayload | null
                   setMessage({ tone: "error", text: "Arquivo grande demais para ser um cérebro." });
                   return;
                 }
-                load(await file.text());
+                void load(await file.text());
               }}
             />
           </div>
